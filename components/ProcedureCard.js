@@ -1,6 +1,6 @@
-// components/ProcedureCard.js
+// components/ProcedureCard.js stable 10.0
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {View,Text,TouchableOpacity,Modal,Alert,Image,ScrollView,TextInput} from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
@@ -8,7 +8,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { styles } from '../styles/globalStyles';
 import { FullscreenImageViewer, ImageGridViewer } from '../utils/imageUtils';
 import { SUPABASE_URL, SUPABASE_BUCKET, SUPABASE_KEY } from '../utils/supaBaseConfig';
-
+import { KeyboardAvoidingView, Platform } from 'react-native';
+import { InteractionManager } from 'react-native';
 export default function ProcedureCard({ item, onComplete, onDelete, refreshMachine }) {
         const [bgColor, setBgColor] = useState('#e4001e');
         const [modalVisible, setModalVisible] = useState(false);
@@ -21,7 +22,7 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
         const [fullscreenRotation, setFullscreenRotation] = useState(0);
         const [panX, setPanX] = useState(0);
         const [panY, setPanY] = useState(0);
-      
+        const galleryScrollRef = useRef(null);
         const [originalDescription, setOriginalDescription] = useState(description);
         const [originalImageUrls, setOriginalImageUrls] = useState([...imageUrls]);
       
@@ -112,13 +113,17 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
         };
       
         const handleBack = () => {
-          setDescription(originalDescription);
-          setImageUrls(originalImageUrls);
-          setEditMode(false);
-          setImageEditMode(false);
-          setModalVisible(false);
+        
+          if (editMode) {
+            setEditMode(false);
+            setImageEditMode(false);
+            setDescription(originalDescription);
+            setImageUrls(originalImageUrls);
+          } else {
+            setModalVisible(false);
+          }
         };
-      
+
         const handleImagePick = async () => {
           setImageEditMode(false);
           try {
@@ -146,6 +151,11 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
               if (response.status === 200) {
                 const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_BUCKET}/${fileName}`;
                 setImageUrls((prev) => [...prev, publicUrl]);
+                
+                // 🔥 NEW: Scroll to end after adding image
+                setTimeout(() => {
+                  galleryScrollRef.current?.scrollToEnd({ animated: true });
+                }, 300);
               } else {
                 alert(`Upload failed: ${response.status}`);
               }
@@ -154,7 +164,7 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
             alert('Upload error: ' + err.message);
           }
         };
-        
+                
       
         return (
           <View style={[styles.procItem, { backgroundColor: bgColor }]}>
@@ -198,65 +208,129 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
       
       
       
-      
-      
-      {/* Section 3: Fullscreen */}
-      
-      <Modal visible={modalVisible} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <ScrollView>
-            {imageUrls.length > 0 && (
-  <ImageGridViewer
-    imageUrls={imageUrls}
-    imageEditMode={imageEditMode}
-    onDeleteImage={handleDeleteImage}
-    onSelectImage={(index) => {
-      setSelectedImageIndex(index);
-      setFullscreenScale(1);
-      setFullscreenRotation(0);
-      setPanX(0);
-      setPanY(0);
-    }}
-  />
-)}
-              {!editMode ? (
-                <>
-                  <Text style={{ color: '#fff' }}>{description || 'No description yet.'}</Text>
-                  <TouchableOpacity style={styles.editBtn} onPress={() => setEditMode(true)}>
-                    <Text style={styles.editText}>Edit Details</Text>
-                  </TouchableOpacity>
-                </>
-              ) : (
-                <>
-                  <TextInput
-                    style={[styles.input, { minHeight: 100 }]}
-                    placeholder="Enter description..."
-                    placeholderTextColor="#777"
-                    multiline
-                    value={description}
-                    onChangeText={setDescription}
-                  />
-                  <TouchableOpacity style={styles.button} onPress={handleImagePick}>
-                    <Text style={styles.buttonText}>Attach Image</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.deleteBtn} onPress={() => setImageEditMode(!imageEditMode)}>
-                    <Text style={styles.buttonText}>Delete Image</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.button} onPress={saveDescription}>
-                    <Text style={styles.buttonText}>Save</Text>
-                  </TouchableOpacity>
-                </>
-              )}
-              <TouchableOpacity style={styles.button} onPress={handleBack}>
-                <Text style={styles.buttonText}>Back to Machine</Text>
-              </TouchableOpacity>
-            </ScrollView>
-          </View>
+{/* Section 3: Fullscreen */}
+
+{/* Section 3: Fullscreen */}
+
+<Modal visible={modalVisible} transparent animationType="fade">
+  <View style={styles.modalOverlay}>
+
+    {/* 🔥 Floating title - changes based on editMode */}
+    <Text style={styles.modalTitleOutside}>
+      {editMode ? 'Edit Details' : 'Procedure Details'}
+    </Text>
+
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={styles.modalContainer}
+    >
+      <View style={{ flex: 1 }}>
+
+        {/* Text Details at Top */}
+        <View style={{ flex: 1 }}>
+          <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
+            {!editMode ? (
+              <Text style={styles.cardText}>
+                {description || 'No description yet.'}
+              </Text>
+            ) : (
+              <TextInput
+                style={[styles.input, { minHeight: 100 }]}
+                placeholder="Enter description..."
+                placeholderTextColor="#777"
+                multiline
+                value={description}
+                onChangeText={setDescription}
+              />
+            )}
+          </ScrollView>
         </View>
-      </Modal>
-      
-      <FullscreenImageViewer
+{/* Image Gallery Underneath */}
+<View style={{ height: imageEditMode ? 200 : editMode ? 80 : 200, marginTop: 10 }}>
+  <ScrollView ref={galleryScrollRef}>
+    {imageUrls.length > 0 ? (
+      <ImageGridViewer
+        imageUrls={imageUrls}
+        imageEditMode={imageEditMode}
+        onDeleteImage={handleDeleteImage}
+        onSelectImage={(index) => {
+          setSelectedImageIndex(index);
+          setFullscreenScale(1);
+          setFullscreenRotation(0);
+          setPanX(0);
+          setPanY(0);
+        }}
+      />
+    ) : (
+      <Text style={{ color: '#888', textAlign: 'center' }}>No Images</Text>
+    )}
+  </ScrollView>
+</View>
+      </View>
+
+{/* Fixed Buttons at Bottom */}
+<View style={styles.fixedButtonRow}>
+  {!editMode ? (
+    <>
+      <TouchableOpacity style={styles.fixedButton} onPress={() => setEditMode(true)}>
+        <Text style={styles.buttonText}>Edit</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.fixedButton} onPress={handleBack}>
+        <Text style={styles.buttonText}>Back</Text>
+      </TouchableOpacity>
+    </>
+  ) : (
+    <>
+      {/* ✅ ADD Button with Scroll Fix */}
+      <TouchableOpacity
+        style={styles.fixedButton}
+        onPress={async () => {
+          await handleImagePick();
+          InteractionManager.runAfterInteractions(() => {
+            setTimeout(() => {
+              galleryScrollRef.current?.scrollToEnd({ animated: true });
+            }, 300);
+          });
+        }}
+      >
+        <Text style={styles.buttonText}>Add</Text>
+      </TouchableOpacity>
+
+      {/* ✅ DELETE Button with Scroll Fix */}
+      <TouchableOpacity
+        style={styles.fixedButton}
+        onPress={() => {
+          setImageEditMode(prev => {
+            const newMode = !prev;
+            if (newMode) {
+              InteractionManager.runAfterInteractions(() => {
+                setTimeout(() => {
+                  galleryScrollRef.current?.scrollToEnd({ animated: true });
+                }, 300);
+              });
+            }
+            return newMode;
+          });
+        }}
+      >
+        <Text style={styles.buttonText}>Delete</Text>
+      </TouchableOpacity>
+
+      {/* SAVE and BACK remain simple */}
+      <TouchableOpacity style={styles.fixedButton} onPress={saveDescription}>
+        <Text style={styles.buttonText}>Save</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.fixedButton} onPress={handleBack}>
+        <Text style={styles.buttonText}>Back</Text>
+      </TouchableOpacity>
+    </>
+  )}
+</View>
+    </KeyboardAvoidingView>
+  </View>
+</Modal>
+
+<FullscreenImageViewer
   visible={selectedImageIndex !== null}
   uri={imageUrls[selectedImageIndex]}
   onClose={() => setSelectedImageIndex(null)}
@@ -269,7 +343,7 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
   setScale={setFullscreenScale}
   setRotation={setFullscreenRotation}
 />
-      </View>
-      );
-      }
+</View>
+);
+}
       

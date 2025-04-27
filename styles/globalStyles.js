@@ -1,6 +1,7 @@
 // styles/globalStyles.js
 
 import { StyleSheet } from 'react-native';
+import { StatusBar } from 'react-native';
 
 export const styles = StyleSheet.create({
   addBtn: {
@@ -63,15 +64,9 @@ export const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.85)',
     justifyContent: 'center',
     alignItems: 'center',
+    marginTop: -StatusBar.currentHeight || 0,
   },
-  modalContainer: {
-    backgroundColor: '#111',
-    padding: 20,
-    borderRadius: 10,
-    width: '80%',
-    maxHeight: '80%',
-  },
-  modalTitle: {
+    modalTitle: {
     color: '#0f0',
     fontSize: 20,
     marginBottom: 10,
@@ -101,8 +96,10 @@ export const styles = StyleSheet.create({
   buttonText: {
     color: '#000',
     fontWeight: 'bold',
+    textAlign: 'center',          // ✅ horizontal center inside text box
+    textAlignVertical: 'center',  // ✅ vertical center inside text box (important for Android)
   },
-  cancelText: {
+    cancelText: {
     color: '#f00',
     textAlign: 'center',
     marginTop: 10,
@@ -235,6 +232,45 @@ export const styles = StyleSheet.create({
     borderRadius: 6,
     alignItems: 'center',
   },
-  
-  
+  modalContainer: {
+    backgroundColor: '#111',
+    paddingHorizontal: 15,
+    paddingTop: 10,
+    paddingBottom: 0,
+    borderRadius: 10,
+    width: '92%',
+    height: '88%',
+    flexDirection: 'column',
+  },
+    galleryScroll: {
+    maxHeight: 200,
+    marginBottom: 10,
+  },
+  detailsScroll: {
+    flex: 1,
+    marginBottom: 10,
+  },
+  fixedButtonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    padding: 10,
+    backgroundColor: '#111',
+  },
+  fixedButton: {
+    flex: 1,
+    marginHorizontal: 5,
+    backgroundColor: '#0f0',
+    padding: 10,
+    borderRadius: 6,
+    alignItems: 'center',       // ✅ horizontal center
+    justifyContent: 'center',   // ✅ vertical center
+  },
+  modalTitleOutside: {
+    color: '#0f0',
+    fontSize: 22,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+      
 });
