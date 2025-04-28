@@ -34,3 +34,6 @@ yarn-error.*
 
 # typescript
 *.tsbuildinfo
+
+# Ignore Supabase CLI temp files
+supabase/.temp/

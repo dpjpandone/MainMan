@@ -8,8 +8,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { styles } from '../styles/globalStyles';
 import { FullscreenImageViewer, ImageGridViewer } from '../utils/imageUtils';
 import { SUPABASE_URL, SUPABASE_BUCKET, SUPABASE_KEY } from '../utils/supaBaseConfig';
-import { KeyboardAvoidingView, Platform } from 'react-native';
+import { Keyboard, KeyboardAvoidingView, Platform } from 'react-native';
 import { InteractionManager } from 'react-native';
+
 export default function ProcedureCard({ item, onComplete, onDelete, refreshMachine }) {
         const [bgColor, setBgColor] = useState('#e4001e');
         const [modalVisible, setModalVisible] = useState(false);
@@ -32,7 +33,17 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
       
         const dueDate = new Date(item.dueDate);
         const daysRemaining = Math.floor((dueDate - now) / (1000 * 60 * 60 * 24));
-      
+        const [keyboardVisible, setKeyboardVisible] = useState(false);
+        
+        useEffect(() => {
+          const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+          const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+          return () => {
+            keyboardDidShowListener.remove();
+            keyboardDidHideListener.remove();
+          };
+        }, []);
+        
         useEffect(() => {
           let intervalId;
         
@@ -210,19 +221,19 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
       
 {/* Section 3: Fullscreen */}
 
-{/* Section 3: Fullscreen */}
-
-<Modal visible={modalVisible} transparent animationType="fade">
+<Modal visible={modalVisible} animationType="fade">
   <View style={styles.modalOverlay}>
 
-    {/* 🔥 Floating title - changes based on editMode */}
-    <Text style={styles.modalTitleOutside}>
-      {editMode ? 'Edit Details' : 'Procedure Details'}
-    </Text>
+    {/* 🔥 Floating title - hidden if keyboard is open */}
+    {!keyboardVisible && (
+      <Text style={styles.modalTitleOutside}>
+        {editMode ? 'Edit Details' : 'Procedure Details'}
+      </Text>
+    )}
 
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.modalContainer}
+      style={[styles.modalContainer, keyboardVisible && { paddingBottom: 15 }]}
     >
       <View style={{ flex: 1 }}>
 
@@ -235,7 +246,7 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
               </Text>
             ) : (
               <TextInput
-                style={[styles.input, { minHeight: 100 }]}
+                style={[styles.input, { minHeight: 100, textAlignVertical: 'top' }]}
                 placeholder="Enter description..."
                 placeholderTextColor="#777"
                 multiline
@@ -245,87 +256,91 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
             )}
           </ScrollView>
         </View>
-{/* Image Gallery Underneath */}
-<View style={{ height: imageEditMode ? 200 : editMode ? 80 : 200, marginTop: 10 }}>
-  <ScrollView ref={galleryScrollRef}>
-    {imageUrls.length > 0 ? (
-      <ImageGridViewer
-        imageUrls={imageUrls}
-        imageEditMode={imageEditMode}
-        onDeleteImage={handleDeleteImage}
-        onSelectImage={(index) => {
-          setSelectedImageIndex(index);
-          setFullscreenScale(1);
-          setFullscreenRotation(0);
-          setPanX(0);
-          setPanY(0);
-        }}
-      />
-    ) : (
-      <Text style={{ color: '#888', textAlign: 'center' }}>No Images</Text>
-    )}
-  </ScrollView>
-</View>
+
+        {/* Image Gallery Underneath (fixed at 80px) */}
+        <View style={{ height: imageEditMode ? 200 : editMode ? 80 : 200, marginTop: 10 }}>
+
+          <ScrollView ref={galleryScrollRef}>
+            {imageUrls.length > 0 ? (
+              <ImageGridViewer
+                imageUrls={imageUrls}
+                imageEditMode={imageEditMode}
+                onDeleteImage={handleDeleteImage}
+                onSelectImage={(index) => {
+                  setSelectedImageIndex(index);
+                  setFullscreenScale(1);
+                  setFullscreenRotation(0);
+                  setPanX(0);
+                  setPanY(0);
+                }}
+              />
+            ) : (
+              <Text style={{ color: '#888', textAlign: 'center' }}>No Images</Text>
+            )}
+          </ScrollView>
+        </View>
+
       </View>
 
-{/* Fixed Buttons at Bottom */}
-<View style={styles.fixedButtonRow}>
-  {!editMode ? (
-    <>
-      <TouchableOpacity style={styles.fixedButton} onPress={() => setEditMode(true)}>
-        <Text style={styles.buttonText}>Edit</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.fixedButton} onPress={handleBack}>
-        <Text style={styles.buttonText}>Back</Text>
-      </TouchableOpacity>
-    </>
-  ) : (
-    <>
-      {/* ✅ ADD Button with Scroll Fix */}
-      <TouchableOpacity
-        style={styles.fixedButton}
-        onPress={async () => {
-          await handleImagePick();
-          InteractionManager.runAfterInteractions(() => {
-            setTimeout(() => {
-              galleryScrollRef.current?.scrollToEnd({ animated: true });
-            }, 300);
-          });
-        }}
-      >
-        <Text style={styles.buttonText}>Add</Text>
-      </TouchableOpacity>
+      {/* Fixed Buttons at Bottom */}
+      <View style={styles.fixedButtonRow}>
+        {!editMode ? (
+          <>
+            <TouchableOpacity style={styles.fixedButton} onPress={() => setEditMode(true)}>
+              <Text style={styles.buttonText}>Edit</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.fixedButton} onPress={handleBack}>
+              <Text style={styles.buttonText}>Back</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            {/* ✅ ADD Button with Scroll Fix */}
+            <TouchableOpacity
+              style={styles.fixedButton}
+              onPress={async () => {
+                await handleImagePick();
+                InteractionManager.runAfterInteractions(() => {
+                  setTimeout(() => {
+                    galleryScrollRef.current?.scrollToEnd({ animated: true });
+                  }, 300);
+                });
+              }}
+            >
+              <Text style={styles.buttonText}>Add</Text>
+            </TouchableOpacity>
 
-      {/* ✅ DELETE Button with Scroll Fix */}
-      <TouchableOpacity
-        style={styles.fixedButton}
-        onPress={() => {
-          setImageEditMode(prev => {
-            const newMode = !prev;
-            if (newMode) {
-              InteractionManager.runAfterInteractions(() => {
-                setTimeout(() => {
-                  galleryScrollRef.current?.scrollToEnd({ animated: true });
-                }, 300);
-              });
-            }
-            return newMode;
-          });
-        }}
-      >
-        <Text style={styles.buttonText}>Delete</Text>
-      </TouchableOpacity>
+            {/* ✅ DELETE Button with Scroll Fix */}
+            <TouchableOpacity
+              style={styles.fixedButton}
+              onPress={() => {
+                setImageEditMode(prev => {
+                  const newMode = !prev;
+                  if (newMode) {
+                    InteractionManager.runAfterInteractions(() => {
+                      setTimeout(() => {
+                        galleryScrollRef.current?.scrollToEnd({ animated: true });
+                      }, 300);
+                    });
+                  }
+                  return newMode;
+                });
+              }}
+            >
+              <Text style={styles.buttonText}>Delete</Text>
+            </TouchableOpacity>
 
-      {/* SAVE and BACK remain simple */}
-      <TouchableOpacity style={styles.fixedButton} onPress={saveDescription}>
-        <Text style={styles.buttonText}>Save</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.fixedButton} onPress={handleBack}>
-        <Text style={styles.buttonText}>Back</Text>
-      </TouchableOpacity>
-    </>
-  )}
-</View>
+            {/* SAVE and BACK remain simple */}
+            <TouchableOpacity style={styles.fixedButton} onPress={saveDescription}>
+              <Text style={styles.buttonText}>Save</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.fixedButton} onPress={handleBack}>
+              <Text style={styles.buttonText}>Back</Text>
+            </TouchableOpacity>
+          </>
+        )}
+      </View>
+
     </KeyboardAvoidingView>
   </View>
 </Modal>

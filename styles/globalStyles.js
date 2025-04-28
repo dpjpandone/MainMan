@@ -61,11 +61,13 @@ export const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.85)',
+    width: '100%',         // 🔥 Full width
+    height: '100%',        // 🔥 Full height
+    backgroundColor: '#000',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: -StatusBar.currentHeight || 0,
   },
+  
     modalTitle: {
     color: '#0f0',
     fontSize: 20,

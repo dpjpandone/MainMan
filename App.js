@@ -1,5 +1,5 @@
 // App.js
-// App.js
+
 import 'react-native-reanimated'; // ✅ must be FIRST
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';

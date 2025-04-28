@@ -1,4 +1,4 @@
-//  MachineScreen Core
+//  MachineScreen.js
 
 import React, { useState, useCallback, useEffect } from 'react';
 import { View, Text, FlatList, TouchableOpacity, Modal, TextInput, Alert } from 'react-native';
