@@ -224,12 +224,7 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
   <View style={styles.modalOverlay}>
     <StatusBar backgroundColor="#000" barStyle="light-content" />
 
-    {/* 🔥 Floating title - hidden if keyboard is open */}
-    {!keyboardVisible && (
-      <Text style={styles.modalTitleOutside}>
-        {editMode ? 'Edit Details' : 'Procedure Details'}
-      </Text>
-    )}
+
 
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
