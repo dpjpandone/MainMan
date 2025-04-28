@@ -1,7 +1,7 @@
 // components/ProcedureCard.js stable 10.0
 
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, Modal, Alert, Image, ScrollView, TextInput, KeyboardAvoidingView, Platform, StatusBar } from 'react-native';
+import { View, Text, TouchableOpacity, Modal, Alert, Image, ScrollView, TextInput, KeyboardAvoidingView, Platform, StatusBar, Keyboard } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -25,7 +25,8 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
         const galleryScrollRef = useRef(null);
         const [originalDescription, setOriginalDescription] = useState(description);
         const [originalImageUrls, setOriginalImageUrls] = useState([...imageUrls]);
-      
+        const [keyboardVisible, setKeyboardVisible] = useState(false);
+
         const now = new Date();
         const lastCompleted = item.lastCompleted ? new Date(item.lastCompleted) : null;
         const isPastDue = !lastCompleted || (Math.floor((now - lastCompleted) / (1000 * 60 * 60 * 24)) > item.intervalDays);
@@ -40,8 +41,17 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
             }, 300);
           });
         };
-                
+       
         useEffect(() => {
+          const showSubscription = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+          const hideSubscription = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+        
+          return () => {
+            showSubscription.remove();
+            hideSubscription.remove();
+          };
+        }, []);
+                useEffect(() => {
           let intervalId;
         
           if (isPastDue) {
@@ -222,11 +232,9 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
   <View style={styles.modalOverlay}>
     <StatusBar backgroundColor="#000" barStyle="light-content" />
 
-
-
     <KeyboardAvoidingView
   behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-  style={styles.modalContainer}
+  style={[styles.modalContainer, keyboardVisible ? { paddingBottom: 80 } : null]}
 >
       <View style={{ flex: 1 }}>
 
@@ -251,79 +259,82 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
         </View>
 
         {/* Image Gallery Underneath (fixed at 80px) */}
-        <View style={{ height: imageEditMode ? 200 : editMode ? 80 : 200, marginTop: 10 }}>
-
-          <ScrollView ref={galleryScrollRef}>
-            {imageUrls.length > 0 ? (
-              <ImageGridViewer
-                imageUrls={imageUrls}
-                imageEditMode={imageEditMode}
-                onDeleteImage={handleDeleteImage}
-                onSelectImage={(index) => {
-                  setSelectedImageIndex(index);
-                  setFullscreenScale(1);
-                  setFullscreenRotation(0);
-                  setPanX(0);
-                  setPanY(0);
-                }}
-              />
-            ) : (
-              <Text style={{ color: '#888', textAlign: 'center' }}>No Images</Text>
-            )}
-          </ScrollView>
-        </View>
+        {!keyboardVisible && (
+          <View style={{ height: imageEditMode ? 200 : editMode ? 80 : 200, marginTop: 10 }}>
+            <ScrollView ref={galleryScrollRef}>
+              {imageUrls.length > 0 ? (
+                <ImageGridViewer
+                  imageUrls={imageUrls}
+                  imageEditMode={imageEditMode}
+                  onDeleteImage={handleDeleteImage}
+                  onSelectImage={(index) => {
+                    setSelectedImageIndex(index);
+                    setFullscreenScale(1);
+                    setFullscreenRotation(0);
+                    setPanX(0);
+                    setPanY(0);
+                  }}
+                />
+              ) : (
+                <Text style={{ color: '#888', textAlign: 'center' }}>No Images</Text>
+              )}
+            </ScrollView>
+          </View>
+        )}
 
       </View>
 
-{/* Fixed Buttons at Bottom */}
-<View style={styles.fixedButtonRow}>
-  {!editMode ? (
-    <>
-      <TouchableOpacity style={styles.fixedButton} onPress={() => setEditMode(true)}>
-        <Text style={styles.buttonText}>Edit</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.fixedButton} onPress={handleBack}>
-        <Text style={styles.buttonText}>Back</Text>
-      </TouchableOpacity>
-    </>
-  ) : (
-    <>
-      <TouchableOpacity
-        style={styles.fixedButton}
-        onPress={async () => {
-          await handleImagePick();
-          scrollToGalleryEnd();
-        }}
-      >
-        <Text style={styles.buttonText}>Add</Text>
-      </TouchableOpacity>
+      {/* Fixed Buttons at Bottom */}
+      {!keyboardVisible && (
+        <View style={styles.fixedButtonRow}>
+          {!editMode ? (
+            <>
+              <TouchableOpacity style={styles.fixedButton} onPress={() => setEditMode(true)}>
+                <Text style={styles.buttonText}>Edit</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.fixedButton} onPress={handleBack}>
+                <Text style={styles.buttonText}>Back</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <TouchableOpacity
+                style={styles.fixedButton}
+                onPress={async () => {
+                  await handleImagePick();
+                  scrollToGalleryEnd();
+                }}
+              >
+                <Text style={styles.buttonText}>Add</Text>
+              </TouchableOpacity>
 
-      {/* ✅ DELETE Button with Scroll Fix */}
-      <TouchableOpacity
-        style={styles.fixedButton}
-        onPress={() => {
-          setImageEditMode(prev => {
-            const newMode = !prev;
-            if (newMode) {
-              scrollToGalleryEnd();
-            }
-            return newMode;
-          });
-        }}
-      >
-        <Text style={styles.buttonText}>Delete</Text>
-      </TouchableOpacity>
+              {/* ✅ DELETE Button with Scroll Fix */}
+              <TouchableOpacity
+                style={styles.fixedButton}
+                onPress={() => {
+                  setImageEditMode(prev => {
+                    const newMode = !prev;
+                    if (newMode) {
+                      scrollToGalleryEnd();
+                    }
+                    return newMode;
+                  });
+                }}
+              >
+                <Text style={styles.buttonText}>Delete</Text>
+              </TouchableOpacity>
 
-      {/* SAVE and BACK remain simple */}
-      <TouchableOpacity style={styles.fixedButton} onPress={saveDescription}>
-        <Text style={styles.buttonText}>Save</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.fixedButton} onPress={handleBack}>
-        <Text style={styles.buttonText}>Back</Text>
-      </TouchableOpacity>
-    </>
-  )}
-</View>
+              {/* SAVE and BACK remain simple */}
+              <TouchableOpacity style={styles.fixedButton} onPress={saveDescription}>
+                <Text style={styles.buttonText}>Save</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.fixedButton} onPress={handleBack}>
+                <Text style={styles.buttonText}>Back</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+      )}
 
     </KeyboardAvoidingView>
   </View>
