@@ -267,6 +267,10 @@ export const styles = StyleSheet.create({
     alignItems: 'center',       // ✅ horizontal center
     justifyContent: 'center',   // ✅ vertical center
   },
+  deleteButton: {
+    backgroundColor: '#cc0000',  // 🔥 slightly deeper red than pure #f00
+  },
+  
   modalTitleOutside: {
     color: '#0f0',
     fontSize: 22,

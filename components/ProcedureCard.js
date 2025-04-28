@@ -1,4 +1,4 @@
-// components/ProcedureCard.js stable 10.0
+// components/ProcedureCard.js stable 10.6 fullscreen keyboard
 
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, Modal, Alert, Image, ScrollView, TextInput, KeyboardAvoidingView, Platform, StatusBar, Keyboard } from 'react-native';
@@ -260,8 +260,8 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
 
         {/* Image Gallery Underneath (fixed at 80px) */}
         {!keyboardVisible && (
-          <View style={{ height: imageEditMode ? 200 : editMode ? 80 : 200, marginTop: 10 }}>
-            <ScrollView ref={galleryScrollRef}>
+          <View style={{ height: 200, marginTop: 10 }}>
+          <ScrollView ref={galleryScrollRef}>
               {imageUrls.length > 0 ? (
                 <ImageGridViewer
                   imageUrls={imageUrls}
@@ -308,19 +308,18 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
                 <Text style={styles.buttonText}>Add</Text>
               </TouchableOpacity>
 
-              {/* ✅ DELETE Button with Scroll Fix */}
               <TouchableOpacity
-                style={styles.fixedButton}
-                onPress={() => {
-                  setImageEditMode(prev => {
-                    const newMode = !prev;
-                    if (newMode) {
-                      scrollToGalleryEnd();
-                    }
-                    return newMode;
-                  });
-                }}
-              >
+  style={[styles.fixedButton, styles.deleteButton]}  // <-- key change here
+  onPress={() => {
+    setImageEditMode(prev => {
+      const newMode = !prev;
+      if (newMode) {
+        scrollToGalleryEnd();
+      }
+      return newMode;
+    });
+  }}
+>
                 <Text style={styles.buttonText}>Delete</Text>
               </TouchableOpacity>
 
