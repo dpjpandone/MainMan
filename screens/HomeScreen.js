@@ -5,27 +5,55 @@ import {
   Text,
   FlatList,
   TouchableOpacity,
-  Alert,
-  TextInput,
   Modal,
+  TextInput,
+  Alert,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { styles } from '../styles/globalStyles';
+import { createClient } from '@supabase/supabase-js';
+import { SUPABASE_URL, SUPABASE_KEY } from '../utils/supaBaseConfig';
+
+// Initialize Supabase client
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 export default function HomeScreen({ navigation }) {
   const [machines, setMachines] = useState([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [newMachineName, setNewMachineName] = useState('');
+  const [companyId, setCompanyId] = useState(null);
 
   useEffect(() => {
-    const fetchMachines = async () => {
-      const data = await AsyncStorage.getItem('machines');
-      if (data) {
-        setMachines(JSON.parse(data));
+    const fetchCompanyAndMachines = async () => {
+      try {
+        const session = await AsyncStorage.getItem('loginData');
+        const parsedSession = JSON.parse(session);
+        const companyId = parsedSession?.companyId;
+
+        if (!companyId) {
+          console.error('No companyId found.');
+          return;
+        }
+
+        setCompanyId(companyId);
+        console.log('Loaded companyId:', companyId);
+
+        const { data, error } = await supabase
+          .from('machines')
+          .select('*')
+          .eq('company_id', companyId);
+
+        if (error) {
+          console.error('Error fetching machines:', error.message);
+        } else {
+          setMachines(data);
+        }
+      } catch (error) {
+        console.error('Unexpected error loading machines:', error);
       }
     };
 
-    const unsubscribe = navigation.addListener('focus', fetchMachines);
+    const unsubscribe = navigation.addListener('focus', fetchCompanyAndMachines);
     return unsubscribe;
   }, [navigation]);
 
@@ -34,50 +62,81 @@ export default function HomeScreen({ navigation }) {
   };
 
   const addMachine = async () => {
-    if (!newMachineName.trim()) return;
-    const newMachine = {
-      id: Date.now().toString(),
-      name: newMachineName.trim(),
-      procedures: [],
-      createdAt: new Date().toISOString(),
-    };
+    if (!newMachineName.trim()) {
+      Alert.alert('Error', 'Please enter a machine name.');
+      return;
+    }
+    if (!companyId) {
+      Alert.alert('Error', 'Company ID not loaded yet.');
+      return;
+    }
 
-    const updatedMachines = [...machines, newMachine];
-    await AsyncStorage.setItem('machines', JSON.stringify(updatedMachines));
-    setMachines(updatedMachines);
-    setNewMachineName('');
-    setModalVisible(false);
+    console.log('Adding machine for companyId:', companyId);
+
+    try {
+      const { data, error } = await supabase
+        .from('machines')
+        .insert([{ name: newMachineName.trim(), company_id: companyId }])
+        .select();
+
+      if (error) {
+        console.error('Supabase Insert Error:', error.message);
+        Alert.alert('Error', 'Failed to add machine: ' + error.message);
+        return;
+      }
+
+      console.log('Inserted machine:', data);
+
+      setMachines((prevMachines) => [...prevMachines, ...data]);
+      setNewMachineName('');
+      setModalVisible(false);
+    } catch (error) {
+      console.error('Unexpected error adding machine:', error);
+      Alert.alert('Error', 'An unexpected error occurred.');
+    }
   };
 
-  const deleteMachine = (id) => {
-    const machine = machines.find((m) => m.id === id);
-    if (!machine) return;
-
+  const deleteMachine = async (id) => {
     Alert.alert(
       'Delete Machine',
-      `Are you sure you want to delete "${machine.name}"? This will remove all associated procedures.`,
+      'Are you sure you want to delete this machine?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            const updatedMachines = machines.filter((m) => m.id !== id);
-            await AsyncStorage.setItem('machines', JSON.stringify(updatedMachines));
-            setMachines(updatedMachines);
+            try {
+              const { error } = await supabase
+                .from('machines')
+                .delete()
+                .eq('id', id)
+                .eq('company_id', companyId);
+
+              if (error) {
+                console.error('Error deleting machine:', error.message);
+                Alert.alert('Error', 'Failed to delete machine.');
+                return;
+              }
+
+              setMachines((prevMachines) => prevMachines.filter((m) => m.id !== id));
+            } catch (error) {
+              console.error('Unexpected error deleting machine:', error);
+              Alert.alert('Error', 'An unexpected error occurred.');
+            }
           },
         },
       ]
     );
   };
 
-const handleDevLogout = async () => {
-  await AsyncStorage.removeItem('loginData'); // only removes login
-  navigation.reset({
-    index: 0,
-    routes: [{ name: 'Login' }],
-  });
-};
+  const handleDevLogout = async () => {
+    await AsyncStorage.removeItem('loginData');
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'Login' }],
+    });
+  };
 
   return (
     <View style={styles.container}>

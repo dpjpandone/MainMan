@@ -2,82 +2,82 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Modal, Alert } from 'react-native';
 import { styles } from '../styles/globalStyles';
+import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_KEY } from '../utils/supaBaseConfig';
+
+// Initialize Supabase client
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 export default function RegisterCompanyModal({ visible, onClose }) {
   const [companyName, setCompanyName] = useState('');
-  const [adminUsername, setAdminUsername] = useState('');
+  const [adminEmail, setAdminEmail] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleRegister = async () => {
-    if (!companyName.trim() || !adminUsername.trim() || !adminPassword.trim()) {
+    if (!companyName.trim() || !adminEmail.trim() || !adminPassword.trim()) {
       Alert.alert('Missing Fields', 'Please fill out all fields.');
       return;
     }
 
+    setLoading(true);
+
     try {
-      // Step 1: Create the company
-      const companyResponse = await fetch(`${SUPABASE_URL}/rest/v1/companies`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': SUPABASE_KEY,
-          'Authorization': `Bearer ${SUPABASE_KEY}`,
-          'Prefer': 'return=representation',
-        },
-        body: JSON.stringify({
-          companyName: companyName.trim(),
-          adminPassword: adminPassword.trim(),
-        }),
-      });
+      // Step 1: Insert company into companies table
+      const { data: companyData, error: companyError } = await supabase
+        .from('companies')
+        .insert([{ company_name: companyName.trim() }])
+        .select()
+        .single(); // get inserted row back
 
-      const companyData = await companyResponse.json();
-
-      if (!companyResponse.ok || !companyData[0]) {
-        console.error('Company creation failed:', companyData);
+      if (companyError) {
+        console.error('Company creation error:', companyError);
         Alert.alert('Error', 'Failed to create company.');
+        setLoading(false);
         return;
       }
 
-      const companyId = companyData[0].id;
+      const companyId = companyData.id;
 
-      // Step 2: Create the admin user
-      const userResponse = await fetch(`${SUPABASE_URL}/rest/v1/users`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': SUPABASE_KEY,
-          'Authorization': `Bearer ${SUPABASE_KEY}`,
-          'Prefer': 'return=minimal',
+      // Step 2: Create Admin User in Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: adminEmail.trim(),
+        password: adminPassword,
+        options: {
+          data: {
+            company_id: companyId,
+            role: 'admin',
+          },
         },
-        body: JSON.stringify({
-          username: adminUsername.trim(),
-          password: adminPassword.trim(),
-          role: 'admin',
-          companyId: companyId,
-        }),
       });
 
-      if (!userResponse.ok) {
-        console.error('Admin user creation failed:', await userResponse.text());
-        Alert.alert('Error', 'Failed to create admin user.');
+      if (authError) {
+        console.error('Auth signup error:', authError);
+        Alert.alert('Error', 'Failed to create admin account.');
+        setLoading(false);
         return;
       }
 
-      Alert.alert('Success', 'Company and admin user registered successfully.');
-
+      Alert.alert('Success', 'Company registered and Admin account created.');
+      
+      // Clear fields
       setCompanyName('');
-      setAdminUsername('');
+      setAdminEmail('');
       setAdminPassword('');
+
+      // Close the modal (navigation happens outside if needed)
       onClose();
+
     } catch (error) {
-      console.error('Registration error:', error);
-      Alert.alert('Error', 'Registration failed.');
+      console.error('Unexpected error:', error);
+      Alert.alert('Error', 'An unexpected error occurred.');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" statusBarTranslucent>
+    <Modal animationType="slide" transparent={true} visible={visible} onRequestClose={onClose}>
       <View style={styles.modalOverlay}>
         <View style={styles.modalContainer}>
           <Text style={styles.modalTitleOutside}>Register New Company</Text>
@@ -85,33 +85,41 @@ export default function RegisterCompanyModal({ visible, onClose }) {
           <TextInput
             style={styles.input}
             placeholder="Company Name"
-            placeholderTextColor="#777"
+            placeholderTextColor="#888"
             value={companyName}
             onChangeText={setCompanyName}
           />
           <TextInput
             style={styles.input}
-            placeholder="Admin Username"
-            placeholderTextColor="#777"
-            value={adminUsername}
-            onChangeText={setAdminUsername}
+            placeholder="Admin Email"
+            placeholderTextColor="#888"
+            value={adminEmail}
+            onChangeText={setAdminEmail}
+            keyboardType="email-address"
+            autoCapitalize="none"
           />
           <TextInput
             style={styles.input}
             placeholder="Admin Password"
-            placeholderTextColor="#777"
-            secureTextEntry
+            placeholderTextColor="#888"
             value={adminPassword}
             onChangeText={setAdminPassword}
+            secureTextEntry
           />
 
-          <TouchableOpacity style={styles.button} onPress={handleRegister}>
-            <Text style={styles.buttonText}>Submit</Text>
-          </TouchableOpacity>
+          <View style={styles.buttonRow}>
+            <TouchableOpacity
+              style={[styles.homeModalButton, loading && { opacity: 0.5 }]}
+              onPress={handleRegister}
+              disabled={loading}
+            >
+              <Text style={styles.homeModalButtonText}>Register</Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity onPress={onClose}>
-            <Text style={styles.cancelText}>Cancel</Text>
-          </TouchableOpacity>
+            <TouchableOpacity style={styles.homeModalCancelButton} onPress={onClose}>
+              <Text style={styles.homeModalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     </Modal>

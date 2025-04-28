@@ -1,91 +1,70 @@
 // screens/LoginScreen.js
-import React, { useState, useContext, useEffect } from 'react';
+import React, { useState, useContext } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Alert } from 'react-native';
 import { styles } from '../styles/globalStyles';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppContext } from '../contexts/AppContext';
 import RegisterCompanyModal from './RegisterCompanyModal';
 import AddUserModal from './AddUserModal';
+import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_KEY } from '../utils/supaBaseConfig';
+
+// Initialize Supabase client
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 export default function LoginScreen({ navigation }) {
   const { loginData, setLoginData } = useContext(AppContext);
-  const [companyName, setCompanyName] = useState('');
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showRegisterCompanyModal, setShowRegisterCompanyModal] = useState(false);
   const [showAddUserModal, setShowAddUserModal] = useState(false);
 
   const handleLogin = async () => {
-    if (!companyName.trim() || !username.trim() || !password.trim()) {
-      Alert.alert('Missing Fields', 'Please fill out all fields.');
+    if (!email.trim() || !password.trim()) {
+      Alert.alert('Missing Fields', 'Please enter your email and password.');
       return;
     }
 
     try {
-      // Step 1: Lookup company by companyName
-      const companyResponse = await fetch(`${SUPABASE_URL}/rest/v1/companies?companyName=eq.${companyName.trim()}`, {
-        method: 'GET',
-        headers: {
-          'apikey': SUPABASE_KEY,
-          'Authorization': `Bearer ${SUPABASE_KEY}`,
-        },
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
       });
 
-      const companyData = await companyResponse.json();
-
-      if (companyData.length === 0) {
-        Alert.alert('Error', 'Company not found.');
+      if (error) {
+        console.error('Login error:', error);
+        Alert.alert('Login Failed', 'Invalid email or password.');
         return;
       }
 
-      const company = companyData[0];
+      const user = data.user;
+      const companyId = user?.user_metadata?.company_id;
+      const role = user?.user_metadata?.role;
+      const username = user?.user_metadata?.username || ''; // optional if you store it
 
-      // Step 2: Lookup user by username and companyId
-      const userResponse = await fetch(`${SUPABASE_URL}/rest/v1/users?username=eq.${username.trim()}&companyId=eq.${company.id}`, {
-        method: 'GET',
-        headers: {
-          'apikey': SUPABASE_KEY,
-          'Authorization': `Bearer ${SUPABASE_KEY}`,
-        },
-      });
-
-      const userData = await userResponse.json();
-
-      if (userData.length === 0) {
-        Alert.alert('Error', 'User not found for this company.');
+      if (!companyId || !role) {
+        Alert.alert('Login Error', 'Missing company or role information.');
         return;
       }
 
-      const user = userData[0];
-
-      // Step 3: Verify password
-      if (password.trim() !== user.password) {
-        Alert.alert('Error', 'Invalid password.');
-        return;
-      }
-
-      // Step 4: Save login session
       const sessionData = {
-        companyId: company.id,
-        companyName: company.companyName,
+        companyId,
         userId: user.id,
-        username: user.username,
-        role: user.role,
+        username,
+        role,
       };
 
       await AsyncStorage.setItem('loginData', JSON.stringify(sessionData));
-      setLoginData(sessionData); // ✅ Now in memory
+      setLoginData(sessionData); // save to context memory too
 
-      // Step 5: Navigate to Home
       navigation.reset({
         index: 0,
         routes: [{ name: 'Home' }],
       });
 
     } catch (error) {
-      console.error('Login failed:', error);
-      Alert.alert('Error', 'Failed to login.');
+      console.error('Unexpected login error:', error);
+      Alert.alert('Error', 'An unexpected error occurred.');
     }
   };
 
@@ -95,17 +74,12 @@ export default function LoginScreen({ navigation }) {
 
       <TextInput
         style={styles.input}
-        placeholder="Company Name"
+        placeholder="Email"
         placeholderTextColor="#777"
-        value={companyName}
-        onChangeText={setCompanyName}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Username"
-        placeholderTextColor="#777"
-        value={username}
-        onChangeText={setUsername}
+        value={email}
+        onChangeText={setEmail}
+        autoCapitalize="none"
+        keyboardType="email-address"
       />
       <TextInput
         style={styles.input}
@@ -147,16 +121,18 @@ export default function LoginScreen({ navigation }) {
           companyId={loginData.companyId} // ✅ Correctly passed from memory
         />
       )}
+
+      {/* DEV Button */}
       <TouchableOpacity onPress={() => {
-  navigation.reset({
-    index: 0,
-    routes: [{ name: 'Home' }],
-  });
-}}>
-  <Text style={{ color: '#0f0', textAlign: 'center', marginTop: 40 }}>
-    [DEV] Go To Home Screen
-  </Text>
-</TouchableOpacity>
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Home' }],
+        });
+      }}>
+        <Text style={{ color: '#0f0', textAlign: 'center', marginTop: 40 }}>
+          [DEV] Go To Home Screen
+        </Text>
+      </TouchableOpacity>
 
     </View>
   );
