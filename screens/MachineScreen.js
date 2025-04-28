@@ -1,13 +1,14 @@
 //  MachineScreen.js
 
 import React, { useState, useCallback, useEffect } from 'react';
-import { View, Text, FlatList, TouchableOpacity, Modal, TextInput, Alert } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, Modal, TextInput, Alert} from 'react-native';
 import { styles } from '../styles/globalStyles';
 import ProcedureCard from '../components/ProcedureCard';
 import * as FileSystem from 'expo-file-system';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRoute, useFocusEffect } from '@react-navigation/native';
 import { SUPABASE_URL, SUPABASE_BUCKET, SUPABASE_KEY } from '../utils/supaBaseConfig';
+import { StatusBar } from 'expo-status-bar';
 
 export default function MachineScreen() {
   const route = useRoute();
@@ -24,6 +25,7 @@ export default function MachineScreen() {
     }, [machineId])
   );
 
+  
   const loadMachine = async () => {
     const data = await AsyncStorage.getItem('machines');
     if (!data) return;
@@ -110,33 +112,62 @@ export default function MachineScreen() {
 
   return (
     <View style={styles.container}>
+       <StatusBar backgroundColor="#000" style="light" />
       <Text style={styles.header}>{machine?.name}</Text>
        <FlatList data={(machine?.procedures || []).filter(p => !p.isNonRoutine)}
         keyExtractor={(item) => item.id}
          renderItem={renderProcedure}
 />
 
-      <TouchableOpacity style={styles.addBtn} onPress={() => setModalVisible(true)}>
-        <Text style={styles.addBtnText}>+ Add Procedure</Text>
+<TouchableOpacity style={styles.addBtn} onPress={() => setModalVisible(true)}>
+  <Text style={styles.addBtnText}>+ Add Procedure</Text>
+</TouchableOpacity>
+
+<Modal 
+  visible={modalVisible} 
+  transparent 
+  animationType="slide" 
+  statusBarTranslucent
+>
+  <View style={styles.modalOverlay}>
+    <View style={styles.modalContainer}>
+      <Text style={styles.modalTitle}>New Procedure</Text>
+      
+      <TextInput 
+        placeholder="Procedure Name" 
+        placeholderTextColor="#777" 
+        value={name} 
+        onChangeText={setName} 
+        style={styles.input} 
+      />
+      <TextInput 
+        placeholder="Interval (days)" 
+        placeholderTextColor="#777" 
+        keyboardType="numeric" 
+        value={interval} 
+        onChangeText={setInterval} 
+        style={styles.input} 
+      />
+      <TextInput 
+        placeholder="Description" 
+        placeholderTextColor="#777" 
+        value={description} 
+        onChangeText={setDescription} 
+        style={styles.input} 
+      />
+
+      <TouchableOpacity style={styles.button} onPress={addProcedure}>
+        <Text style={styles.buttonText}>Save</Text>
       </TouchableOpacity>
-      <Modal visible={modalVisible} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <Text style={styles.modalTitle}>New Procedure</Text>
-            <TextInput placeholder="Procedure Name" placeholderTextColor="#777" value={name} onChangeText={setName} style={styles.input} />
-            <TextInput placeholder="Interval (days)" placeholderTextColor="#777" keyboardType="numeric" value={interval} onChangeText={setInterval} style={styles.input} />
-            <TextInput placeholder="Description" placeholderTextColor="#777" value={description} onChangeText={setDescription} style={styles.input} />
-            <TouchableOpacity style={styles.button} onPress={addProcedure}>
-              <Text style={styles.buttonText}>Save</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setModalVisible(false)}>
-              <Text style={styles.cancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      
+      <TouchableOpacity onPress={() => setModalVisible(false)}>
+        <Text style={styles.cancelText}>Cancel</Text>
+      </TouchableOpacity>
     </View>
-  );
+  </View>
+</Modal>
+</View>
+);
 }
 
 

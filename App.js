@@ -1,15 +1,15 @@
-// App.js
-
 import 'react-native-reanimated'; // ✅ must be FIRST
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Text, StyleSheet } from 'react-native';
+import { Text } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar'; // ✅ correct!
 
-
+// Screens
 import HomeScreen from './screens/HomeScreen';
 import MasterCalendarScreen from './screens/MasterCalendarScreen';
 import MachineScreen from './screens/MachineScreen';
@@ -49,7 +49,9 @@ function TabNavigator() {
         name="Machines"
         component={MachinesStackNavigator}
         options={{
-          tabBarLabel: () => <Text style={{ color: '#fff', fontSize: 12, textAlign: 'center' }}>Routine</Text>,
+          tabBarLabel: () => (
+            <Text style={{ color: '#fff', fontSize: 12, textAlign: 'center' }}>Routine</Text>
+          ),
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons name="tools" color={color} size={size} />
           ),
@@ -81,10 +83,9 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <NavigationContainer>
+        <StatusBar backgroundColor="#000" style="light" /> 
         <TabNavigator />
       </NavigationContainer>
     </GestureHandlerRootView>
   );
 }
-
-const styles = StyleSheet.create({});

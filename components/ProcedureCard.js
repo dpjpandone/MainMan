@@ -1,14 +1,13 @@
 // components/ProcedureCard.js stable 10.0
 
 import React, { useState, useEffect, useRef } from 'react';
-import {View,Text,TouchableOpacity,Modal,Alert,Image,ScrollView,TextInput} from 'react-native';
+import { View, Text, TouchableOpacity, Modal, Alert, Image, ScrollView, TextInput, Keyboard, KeyboardAvoidingView, Platform, StatusBar } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { styles } from '../styles/globalStyles';
 import { FullscreenImageViewer, ImageGridViewer } from '../utils/imageUtils';
 import { SUPABASE_URL, SUPABASE_BUCKET, SUPABASE_KEY } from '../utils/supaBaseConfig';
-import { Keyboard, KeyboardAvoidingView, Platform } from 'react-native';
 import { InteractionManager } from 'react-native';
 
 export default function ProcedureCard({ item, onComplete, onDelete, refreshMachine }) {
@@ -221,8 +220,9 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
       
 {/* Section 3: Fullscreen */}
 
-<Modal visible={modalVisible} animationType="fade">
+<Modal visible={modalVisible} transparent={false} animationType="fade">
   <View style={styles.modalOverlay}>
+    <StatusBar backgroundColor="#000" barStyle="light-content" />
 
     {/* 🔥 Floating title - hidden if keyboard is open */}
     {!keyboardVisible && (
