@@ -6,39 +6,73 @@ import { SUPABASE_URL, SUPABASE_KEY } from '../utils/supaBaseConfig';
 
 export default function RegisterCompanyModal({ visible, onClose }) {
   const [companyName, setCompanyName] = useState('');
+  const [adminUsername, setAdminUsername] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
-  const [employeePassword, setEmployeePassword] = useState('');
 
   const handleRegister = async () => {
-    if (!companyName.trim() || !adminPassword.trim() || !employeePassword.trim()) {
+    if (!companyName.trim() || !adminUsername.trim() || !adminPassword.trim()) {
       Alert.alert('Missing Fields', 'Please fill out all fields.');
       return;
     }
 
-    const response = await fetch(`${SUPABASE_URL}/rest/v1/companies`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`,
-        'Prefer': 'return=minimal',
-      },
-      body: JSON.stringify({
-        companyName: companyName.trim(),
-        adminPassword: adminPassword.trim(),
-        employeePassword: employeePassword.trim(),
-      }),
-    });
+    try {
+      // Step 1: Create the company
+      const companyResponse = await fetch(`${SUPABASE_URL}/rest/v1/companies`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`,
+          'Prefer': 'return=representation',
+        },
+        body: JSON.stringify({
+          companyName: companyName.trim(),
+          adminPassword: adminPassword.trim(),
+        }),
+      });
 
-    if (response.ok) {
-      Alert.alert('Success', 'Company registered successfully.');
+      const companyData = await companyResponse.json();
+
+      if (!companyResponse.ok || !companyData[0]) {
+        console.error('Company creation failed:', companyData);
+        Alert.alert('Error', 'Failed to create company.');
+        return;
+      }
+
+      const companyId = companyData[0].id;
+
+      // Step 2: Create the admin user
+      const userResponse = await fetch(`${SUPABASE_URL}/rest/v1/users`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`,
+          'Prefer': 'return=minimal',
+        },
+        body: JSON.stringify({
+          username: adminUsername.trim(),
+          password: adminPassword.trim(),
+          role: 'admin',
+          companyId: companyId,
+        }),
+      });
+
+      if (!userResponse.ok) {
+        console.error('Admin user creation failed:', await userResponse.text());
+        Alert.alert('Error', 'Failed to create admin user.');
+        return;
+      }
+
+      Alert.alert('Success', 'Company and admin user registered successfully.');
+
       setCompanyName('');
+      setAdminUsername('');
       setAdminPassword('');
-      setEmployeePassword('');
       onClose();
-    } else {
-      console.error(await response.text());
-      Alert.alert('Error', 'Failed to register company.');
+    } catch (error) {
+      console.error('Registration error:', error);
+      Alert.alert('Error', 'Registration failed.');
     }
   };
 
@@ -57,19 +91,18 @@ export default function RegisterCompanyModal({ visible, onClose }) {
           />
           <TextInput
             style={styles.input}
+            placeholder="Admin Username"
+            placeholderTextColor="#777"
+            value={adminUsername}
+            onChangeText={setAdminUsername}
+          />
+          <TextInput
+            style={styles.input}
             placeholder="Admin Password"
             placeholderTextColor="#777"
             secureTextEntry
             value={adminPassword}
             onChangeText={setAdminPassword}
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Employee Password"
-            placeholderTextColor="#777"
-            secureTextEntry
-            value={employeePassword}
-            onChangeText={setEmployeePassword}
           />
 
           <TouchableOpacity style={styles.button} onPress={handleRegister}>
@@ -79,7 +112,6 @@ export default function RegisterCompanyModal({ visible, onClose }) {
           <TouchableOpacity onPress={onClose}>
             <Text style={styles.cancelText}>Cancel</Text>
           </TouchableOpacity>
-
         </View>
       </View>
     </Modal>

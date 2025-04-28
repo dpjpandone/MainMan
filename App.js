@@ -1,5 +1,5 @@
 import 'react-native-reanimated'; // ✅ must be FIRST
-import React from 'react';
+import React, { useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -9,6 +9,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar'; // ✅ correct!
 import LoginScreen from './screens/LoginScreen';
+import { AppContext } from './contexts/AppContext';
 
 // Screens
 import HomeScreen from './screens/HomeScreen';
@@ -82,12 +83,22 @@ function TabNavigator() {
 }
 
 export default function App() {
+  const [loginData, setLoginData] = useState(null);
+
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <NavigationContainer>
-        <StatusBar backgroundColor="#000" style="light" /> 
-        <TabNavigator />
-      </NavigationContainer>
-    </GestureHandlerRootView>
+    <AppContext.Provider value={{ loginData, setLoginData }}>
+<NavigationContainer>
+  <Stack.Navigator
+    screenOptions={{
+      headerShown: false, // 🚫 No white headers on any screen
+    }}
+    initialRouteName="Login"
+  >
+    <Stack.Screen name="Login" component={LoginScreen} />
+    <Stack.Screen name="Home" component={HomeScreen} />
+    {/* Add other screens here */}
+  </Stack.Navigator>
+</NavigationContainer>
+    </AppContext.Provider>
   );
 }
