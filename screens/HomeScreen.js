@@ -5,12 +5,12 @@ import {
   Text,
   FlatList,
   TouchableOpacity,
-  StyleSheet,
   Alert,
   TextInput,
   Modal,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { styles } from '../styles/globalStyles';
 
 export default function HomeScreen({ navigation }) {
   const [machines, setMachines] = useState([]);
@@ -71,9 +71,18 @@ export default function HomeScreen({ navigation }) {
     );
   };
 
+  const handleDevLogout = async () => {
+    await AsyncStorage.removeItem('loginData'); // only removes login
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'Login' }],
+    });
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.header}>Machines</Text>
+
       <FlatList
         data={machines}
         keyExtractor={(item) => item.id}
@@ -83,17 +92,22 @@ export default function HomeScreen({ navigation }) {
               style={{ flex: 1 }}
               onPress={() => goToMachine(item.id)}
             >
-              <Text style={styles.machineText}>{item.name}</Text>
+              <Text style={styles.procName}>{item.name}</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => deleteMachine(item.id)}>
-              <Text style={styles.delete}>✕</Text>
+              <Text style={[styles.buttonText, { color: '#f00', fontSize: 20 }]}>✕</Text>
             </TouchableOpacity>
           </View>
         )}
-        ListEmptyComponent={<Text style={styles.empty}>No machines added</Text>}
+        ListEmptyComponent={<Text style={styles.emptyListText}>No machines added</Text>}
       />
-      <TouchableOpacity style={styles.addButton} onPress={() => setModalVisible(true)}>
-        <Text style={styles.addButtonText}>+ Add Machine</Text>
+
+      <TouchableOpacity style={styles.buttonWhite} onPress={handleDevLogout}>
+        <Text style={styles.buttonText}>Change Credentials</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.addBtn} onPress={() => setModalVisible(true)}>
+        <Text style={styles.addBtnText}>+ Add Machine</Text>
       </TouchableOpacity>
 
       <Modal
@@ -104,7 +118,7 @@ export default function HomeScreen({ navigation }) {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
-            <Text style={styles.modalTitle}>Enter Machine Name</Text>
+            <Text style={styles.modalTitleOutside}>Enter Machine Name</Text>
             <TextInput
               style={styles.input}
               placeholder="Machine name"
@@ -112,15 +126,15 @@ export default function HomeScreen({ navigation }) {
               value={newMachineName}
               onChangeText={setNewMachineName}
             />
-            <View style={styles.modalButtons}>
-              <TouchableOpacity style={styles.button} onPress={addMachine}>
-                <Text style={styles.buttonText}>Add</Text>
+            <View style={styles.buttonRow}>
+              <TouchableOpacity style={styles.homeModalButton} onPress={addMachine}>
+                <Text style={styles.homeModalButtonText}>Add</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.button, { backgroundColor: '#333' }]} 
+                style={styles.homeModalCancelButton}
                 onPress={() => setModalVisible(false)}
               >
-                <Text style={[styles.buttonText, { color: '#fff' }]}>Cancel</Text>
+                <Text style={styles.homeModalCancelText}>Cancel</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -129,93 +143,3 @@ export default function HomeScreen({ navigation }) {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#000',
-    padding: 16,
-  },
-  header: {
-    color: '#0f0',
-    fontSize: 24,
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  machineItem: {
-    backgroundColor: '#111',
-    padding: 16,
-    borderRadius: 6,
-    marginBottom: 10,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  machineText: {
-    color: '#fff',
-    fontSize: 16,
-  },
-  delete: {
-    color: '#f00',
-    fontSize: 20,
-    paddingHorizontal: 10,
-  },
-  empty: {
-    color: '#666',
-    textAlign: 'center',
-    marginTop: 30,
-  },
-  addButton: {
-    backgroundColor: '#0f0',
-    padding: 14,
-    borderRadius: 8,
-    marginTop: 20,
-    alignItems: 'center',
-  },
-  addButtonText: {
-    color: '#000',
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.8)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContainer: {
-    backgroundColor: '#111',
-    padding: 20,
-    borderRadius: 10,
-    width: '80%',
-  },
-  modalTitle: {
-    color: '#0f0',
-    fontSize: 20,
-    marginBottom: 10,
-    textAlign: 'center',
-  },
-  input: {
-    backgroundColor: '#222',
-    color: '#fff',
-    padding: 10,
-    marginBottom: 10,
-    borderRadius: 6,
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  button: {
-    backgroundColor: '#0f0',
-    padding: 10,
-    borderRadius: 6,
-    flex: 1,
-    marginHorizontal: 5,
-    alignItems: 'center',
-  },
-  buttonText: {
-    color: '#000',
-    fontWeight: 'bold',
-  },
-});
