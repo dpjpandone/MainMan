@@ -8,6 +8,7 @@ import { Text } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar'; // ✅ correct!
+import LoginScreen from './screens/LoginScreen';
 
 // Screens
 import HomeScreen from './screens/HomeScreen';
@@ -27,6 +28,7 @@ function MachinesStackNavigator() {
       <Stack.Screen name="Machine" component={MachineScreen} />
       <Stack.Screen name="UploadTest" component={UploadTestScreen} />
       <Stack.Screen name="GestureTest" component={GestureTestScreen} />
+      <Stack.Screen name="Login" component={LoginScreen} />
     </Stack.Navigator>
   );
 }

@@ -71,13 +71,13 @@ export default function HomeScreen({ navigation }) {
     );
   };
 
-  const handleDevLogout = async () => {
-    await AsyncStorage.removeItem('loginData'); // only removes login
-    navigation.reset({
-      index: 0,
-      routes: [{ name: 'Login' }],
-    });
-  };
+const handleDevLogout = async () => {
+  await AsyncStorage.removeItem('loginData'); // only removes login
+  navigation.reset({
+    index: 0,
+    routes: [{ name: 'Login' }],
+  });
+};
 
   return (
     <View style={styles.container}>

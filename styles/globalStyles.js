@@ -278,5 +278,46 @@ export const styles = StyleSheet.create({
     marginBottom: 10,
     textAlign: 'center',
   },
+  emptyListText: {
+    color: '#888',
+    textAlign: 'center',
+    marginTop: 30,
+  },
+  machineItem: {
+    backgroundColor: '#111',
+    padding: 16,
+    borderRadius: 6,
+    marginBottom: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  homeModalButton: {
+    backgroundColor: '#0f0',
+    padding: 14,
+    borderRadius: 8,
+    flex: 1,
+    marginHorizontal: 5,
+    alignItems: 'center',
+  },
+  homeModalCancelButton: {
+    backgroundColor: '#333',
+    padding: 14,
+    borderRadius: 8,
+    flex: 1,
+    marginHorizontal: 5,
+    alignItems: 'center',
+  },
+  homeModalButtonText: {
+    color: '#000',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  homeModalCancelText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  
       
 });
