@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { Picker } from '@react-native-picker/picker';
 import {
   View,
   StyleSheet,
@@ -8,141 +7,198 @@ import {
   TextInput,
   TouchableOpacity,
   Alert,
-  ScrollView
+  ScrollView,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Calendar } from 'react-native-calendars';
 import { useNavigation } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { styles } from '../styles/globalStyles';
-
+import { SUPABASE_URL, SUPABASE_KEY } from '../utils/supaBaseConfig';
 
 export default function MasterCalendarScreen() {
   const [selectedDate, setSelectedDate] = useState(null);
-  const [machines, setMachines] = useState([]);
-  const [selectedMachine, setSelectedMachine] = useState('');
+  const [machineName, setMachineName] = useState('');
   const [procedureName, setProcedureName] = useState('');
   const [procedureDescription, setProcedureDescription] = useState('');
   const [modalVisible, setModalVisible] = useState(false);
   const [nonRoutineProcedures, setNonRoutineProcedures] = useState([]);
+  const [companyId, setCompanyId] = useState(null);
   const navigation = useNavigation();
+  const [expandedId, setExpandedId] = useState(null);
   
-  const deleteNonRoutineProcedure = async (procId, machineId) => {
-    const data = await AsyncStorage.getItem('machines');
-    const machinesList = data ? JSON.parse(data) : [];
+  const loadNonRoutineProcedures = async (companyId) => {
+    console.log('Loading non-routine procedures for companyId:', companyId);
   
-    const updatedMachines = machinesList.map((m) => {
-      if (m.id !== machineId) return m;
-      return {
-        ...m,
-        procedures: m.procedures.filter((p) => p.id !== procId)
-      };
-    });
+    try {
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/non_routine_procedures?company_id=eq.${companyId}&order=due_date.asc`, {
+        method: 'GET',
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`,
+        },
+      });
   
-    await AsyncStorage.setItem('machines', JSON.stringify(updatedMachines));
-    loadNonRoutineProcedures(updatedMachines);
-  };
+      const data = await response.json();
+      console.log('Fetched procedures:', data);
   
-
-  // Load machines from AsyncStorage
-  const loadMachines = async () => {
-    const data = await AsyncStorage.getItem('machines');
-    if (data) {
-      const machinesList = JSON.parse(data);
-      setMachines(machinesList);
-      loadNonRoutineProcedures(machinesList);
+      const now = new Date();
+      const enriched = (data || []).map((proc) => {
+        const due = new Date(proc.due_date);
+        const diffDays = Math.floor((due - now) / (1000 * 60 * 60 * 24));
+  
+        let color = 'blue';
+        let status = `Due in ${diffDays} days`;
+  
+        if (diffDays < 0) {
+          color = 'red';
+          status = 'Past Due';
+        } else if (diffDays < 30) {
+          color = 'orange';
+        }
+  
+        return {
+          ...proc,
+          dueDate: due,
+          color,
+          status,
+        };
+      });
+  
+      setNonRoutineProcedures(enriched);
+    } catch (error) {
+      console.error('Error fetching non-routine procedures:', error);
     }
   };
-
-  // Load non-routine procedures from machines
-  const loadNonRoutineProcedures = (machinesList) => {
-    const procedures = [];
-    machinesList.forEach((machine) => {
-      machine.procedures.forEach((proc) => {
-        if (proc.isNonRoutine && proc.dueDate) {
-          const dueDate = new Date(proc.dueDate);
-          const now = new Date();
-          const diffDays = Math.floor((dueDate - now) / (1000 * 60 * 60 * 24));
-          const item = { ...proc, machineId: machine.id, machineName: machine.name, dueDate };
-
-
-          if (diffDays < 0) {
-            item.status = 'Past Due';
-            item.color = 'red';
-          } else if (diffDays < 30) {
-            item.status = `Due in ${diffDays} days`;
-            item.color = 'orange';
-          } else {
-            item.status = `Due in ${diffDays} days`;
-            item.color = 'blue';
-          }
-
-          procedures.push(item);
-        }
-      });
-    });
-    setNonRoutineProcedures(procedures);  // Update the state to re-render the list
-  };
-
-  // Schedule a new procedure (non-routine)
+  
   const scheduleProcedure = async () => {
-    if (!selectedDate || !selectedMachine || !procedureName.trim()) {
-      Alert.alert('Please select a machine and enter a procedure name.');
+    console.log('--- Schedule Button Pressed ---');
+    console.log('companyId:', companyId);
+    console.log('selectedDate:', selectedDate);
+    console.log('machineName:', machineName);
+    console.log('procedureName:', procedureName);
+  
+    if (!selectedDate || !machineName.trim() || !procedureName.trim() || !companyId) {
+      console.warn('Missing fields. Aborting scheduling.');
+      Alert.alert('Missing Info', 'Please complete all fields including company ID.');
       return;
     }
-
-    const machinesData = await AsyncStorage.getItem('machines');
-    const machinesList = machinesData ? JSON.parse(machinesData) : [];
-
-    const machineIndex = machinesList.findIndex(m => m.id === selectedMachine);
-    if (machineIndex === -1) return;
-
-    const newProcedure = {
-      id: `${Date.now()}`,
-      name: procedureName.trim(),
+  
+    const payload = {
+      company_id: companyId,
+      machine_name: machineName.trim(),
+      procedure_name: procedureName.trim(),
       description: procedureDescription.trim() || 'Scheduled from calendar',
-      intervalDays: 0,
-      dueDate: selectedDate,
-      lastCompleted: null,
-      isNonRoutine: true,
+      due_date: selectedDate,
     };
-
-
-
-    // Update the procedure list for the selected machine
-    machinesList[machineIndex].procedures.push(newProcedure);
-
-    // Save updated machines list
-    await AsyncStorage.setItem('machines', JSON.stringify(machinesList));
-
-    // After saving the new procedure, reload the non-routine procedures list
-    loadNonRoutineProcedures(machinesList);
-
-    setModalVisible(false);
-    setSelectedMachine('');
-    setProcedureName('');
-    setProcedureDescription('');
+  
+    try {
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/non_routine_procedures`, {
+        method: 'POST',
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal',
+        },
+        body: JSON.stringify(payload),
+      });
+  
+      console.log('Supabase insert status:', response.status);
+  
+      if (response.ok) {
+        console.log('Non-routine procedure inserted successfully');
+        setModalVisible(false);
+        setMachineName('');
+        setProcedureName('');
+        setProcedureDescription('');
+        loadNonRoutineProcedures(companyId);
+      } else {
+        const errorText = await response.text();
+        console.error('Insert failed:', errorText);
+        Alert.alert('Insert Error', errorText);
+      }
+    } catch (error) {
+      console.error('Network or parsing error:', error);
+      Alert.alert('Error', 'Something went wrong during scheduling.');
+    }
   };
 
+  const deleteNonRoutineProcedure = async (id) => {
+    Alert.alert(
+      'Delete Procedure',
+      'Are you sure you want to delete this non-routine procedure?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const response = await fetch(`${SUPABASE_URL}/rest/v1/non_routine_procedures?id=eq.${id}&company_id=eq.${companyId}`, {
+                method: 'DELETE',
+                headers: {
+                  'apikey': SUPABASE_KEY,
+                  'Authorization': `Bearer ${SUPABASE_KEY}`,
+                  'Prefer': 'return=minimal',
+                },
+              });
+  
+              console.log('Delete status:', response.status);
+  
+              if (response.ok) {
+                console.log('Procedure deleted successfully');
+                loadNonRoutineProcedures(companyId);
+              } else {
+                const errorText = await response.text();
+                console.error('Delete failed:', errorText);
+                Alert.alert('Delete Error', errorText);
+              }
+            } catch (error) {
+              console.error('Network error during delete:', error);
+              Alert.alert('Error', 'Something went wrong during delete.');
+            }
+          },
+        },
+      ]
+    );
+  };
+    
   useEffect(() => {
-    loadMachines();
+    const init = async () => {
+      console.log('Initializing MasterCalendarScreen...');
+      const session = await AsyncStorage.getItem('loginData');
+      console.log('Raw loginData from AsyncStorage:', session);
+      const parsed = JSON.parse(session);
+      console.log('Parsed loginData:', parsed);
+      const id = parsed?.companyId;
+      console.log('Extracted companyId:', id);
+      if (id) {
+        setCompanyId(id);
+        loadNonRoutineProcedures(id);
+      } else {
+        console.error('No companyId found during init.');
+      }
+    };
+    init();
   }, []);
 
-  // Listen for focus to refresh non-routine procedures every time calendar screen is focused
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
-      loadMachines();
+      console.log('MasterCalendarScreen focused.');
+      if (companyId) {
+        loadNonRoutineProcedures(companyId);
+      }
     });
-
     return unsubscribe;
-  }, [navigation]);
+  }, [navigation, companyId]);
 
   return (
     <View style={styles.container}>
-      {/* Fixed Calendar */}
       <View style={styles.calendarContainer}>
         <Calendar
           markingType="simple"
           onDayPress={(day) => {
+            console.log('Date selected:', day.dateString);
             setSelectedDate(day.dateString);
             setModalVisible(true);
           }}
@@ -159,44 +215,69 @@ export default function MasterCalendarScreen() {
         />
       </View>
 
-      {/* Non-Routine Procedures List (Scrollable) */}
       <ScrollView style={styles.procedureListContainer}>
-  {nonRoutineProcedures.map((item) => (
-    <View key={item.id} style={[styles.procedureCard, { backgroundColor: item.color, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
-      <View style={{ flex: 1 }}>
-        <Text style={styles.cardText}>{item.machineName}: {item.name}</Text>
-        <Text style={styles.cardText}>Due on: {item.dueDate.toDateString()}</Text>
-      </View>
-      <TouchableOpacity onPress={() => deleteNonRoutineProcedure(item.id, item.machineId)}>
-        <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 18 }}>X</Text>
+  {nonRoutineProcedures.map((item) => {
+    const isExpanded = expandedId === item.id;
+
+    return (
+      <TouchableOpacity
+        key={item.id}
+        onPress={() => setExpandedId(isExpanded ? null : item.id)}
+        activeOpacity={0.8}
+      >
+        <View
+          style={[
+            styles.procedureCard,
+            {
+              backgroundColor: item.color,
+              flexDirection: 'column',
+              paddingVertical: 12,
+              paddingHorizontal: 16,
+              marginBottom: 8,
+            },
+          ]}
+        >
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.cardText}>
+                {item.machine_name}: {item.procedure_name}
+              </Text>
+              <Text style={styles.cardText}>Due on: {item.dueDate.toDateString()}</Text>
+            </View>
+            <TouchableOpacity
+  onPress={() => deleteNonRoutineProcedure(item.id)}
+  style={{ padding: 10 }}
+>
+  <Text style={{ color: 'red', fontWeight: 'bold', fontSize: 28 }}>✕</Text>
+</TouchableOpacity>
+          </View>
+
+          {isExpanded && (
+            <View style={{ marginTop: 10 }}>
+              <Text style={[styles.cardText, { color: '#fff' }]}>
+                {item.description || 'No additional details.'}
+              </Text>
+            </View>
+          )}
+        </View>
       </TouchableOpacity>
-    </View>
-  ))}
+    );
+  })}
 </ScrollView>
 
-
-
-      {/* Modal for Scheduling Non-Routine Procedures */}
-      <Modal
-        visible={modalVisible}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setModalVisible(false)}
-      >
+      <Modal visible={modalVisible} transparent animationType="slide" onRequestClose={() => setModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
             <Text style={styles.modalTitle}>Schedule Non-Routine Maintenance</Text>
-            <Text style={styles.label}>Select Machine:</Text>
-            <Picker
-              selectedValue={selectedMachine}
-              onValueChange={(itemValue) => setSelectedMachine(itemValue)}
-              style={styles.picker}
-            >
-              <Picker.Item label="--Select Machine--" value="" />
-              {machines.map((machine) => (
-                <Picker.Item key={machine.id} label={machine.name} value={machine.id} />
-              ))}
-            </Picker>
+
+            <Text style={styles.label}>Machine Name:</Text>
+            <TextInput
+              value={machineName}
+              onChangeText={setMachineName}
+              placeholder="Enter machine or task name"
+              placeholderTextColor="#777"
+              style={styles.input}
+            />
 
             <Text style={styles.label}>Procedure Name:</Text>
             <TextInput
@@ -230,4 +311,3 @@ export default function MasterCalendarScreen() {
     </View>
   );
 }
-

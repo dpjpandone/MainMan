@@ -318,6 +318,13 @@ export const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 16,
   },
+  checkButton: {
+    color: '#00ff00',
+    fontWeight: 'bold',
+    fontSize: 28,
+    includeFontPadding: false,
+  },
+  
   
       
 });
