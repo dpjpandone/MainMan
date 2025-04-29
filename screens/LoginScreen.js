@@ -1,9 +1,10 @@
 // screens/LoginScreen.js
 
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Alert } from 'react-native';
 import { styles } from '../styles/globalStyles';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store'; // 🔥 New!
 import { AppContext } from '../contexts/AppContext';
 import RegisterCompanyModal from './RegisterCompanyModal';
 import AddUserModal from './AddUserModal';
@@ -19,22 +20,51 @@ export default function LoginScreen({ navigation }) {
   const [password, setPassword] = useState('');
   const [showRegisterCompanyModal, setShowRegisterCompanyModal] = useState(false);
   const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true); // default = true
 
-  const handleLogin = async () => {
-    if (!email.trim() || !password.trim()) {
-      Alert.alert('Missing Fields', 'Please enter your email and password.');
+  useEffect(() => {
+    // 🧠 Auto-fill stored credentials without auto-login
+    const checkStoredCredentials = async () => {
+      try {
+        const storedEmail = await SecureStore.getItemAsync('storedEmail');
+        const storedPassword = await SecureStore.getItemAsync('storedPassword');
+  
+        if (storedEmail && storedPassword) {
+          console.log('Stored credentials found. Pre-filling login fields...');
+          setEmail(storedEmail);
+          setPassword(storedPassword);
+          // 👇 NO auto-login call here
+        }
+      } catch (error) {
+        console.error('Error accessing stored credentials:', error);
+      }
+    };
+  
+    checkStoredCredentials();
+  }, []);
+  
+  const handleLogin = async (providedEmail, providedPassword, autoLogin = false) => {
+    const loginEmail = providedEmail || email;
+    const loginPassword = providedPassword || password;
+
+    if (!loginEmail.trim() || !loginPassword.trim()) {
+      if (!autoLogin) {
+        Alert.alert('Missing Fields', 'Please enter your email and password.');
+      }
       return;
     }
 
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
+        email: loginEmail.trim(),
+        password: loginPassword,
       });
 
       if (error) {
         console.error('Login error:', error);
-        Alert.alert('Login Failed', 'Invalid email or password.');
+        if (!autoLogin) {
+          Alert.alert('Login Failed', 'Invalid email or password.');
+        }
         return;
       }
 
@@ -58,14 +88,23 @@ export default function LoginScreen({ navigation }) {
       await AsyncStorage.setItem('loginData', JSON.stringify(sessionData));
       setLoginData(sessionData);
 
+      // 🔥 Store credentials securely after successful login
+      if (!autoLogin) {
+        await SecureStore.setItemAsync('storedEmail', loginEmail.trim());
+        await SecureStore.setItemAsync('storedPassword', loginPassword);
+        console.log('Credentials stored securely.');
+      }
+
       navigation.reset({
         index: 0,
-        routes: [{ name: 'MainTabs' }],  // ✅ fixed!
+        routes: [{ name: 'MainTabs' }],
       });
 
     } catch (error) {
       console.error('Unexpected login error:', error);
-      Alert.alert('Error', 'An unexpected error occurred.');
+      if (!autoLogin) {
+        Alert.alert('Error', 'An unexpected error occurred.');
+      }
     }
   };
 
@@ -90,8 +129,16 @@ export default function LoginScreen({ navigation }) {
         value={password}
         onChangeText={setPassword}
       />
+<TouchableOpacity
+  onPress={() => setRememberMe(!rememberMe)}
+  style={styles.rememberMeWrapper}
+>
+  <Text style={styles.rememberMeToggle}>
+    [ {rememberMe ? 'x' : ' '} ] Remember Me
+  </Text>
+</TouchableOpacity>
 
-      <TouchableOpacity style={styles.button} onPress={handleLogin}>
+      <TouchableOpacity style={styles.button} onPress={() => handleLogin()}>
         <Text style={styles.buttonText}>Login</Text>
       </TouchableOpacity>
 
@@ -127,14 +174,13 @@ export default function LoginScreen({ navigation }) {
       <TouchableOpacity onPress={() => {
         navigation.reset({
           index: 0,
-          routes: [{ name: 'MainTabs' }],  // ✅ fixed here too!
+          routes: [{ name: 'MainTabs' }],
         });
       }}>
         <Text style={{ color: '#0f0', textAlign: 'center', marginTop: 40 }}>
           [DEV] Go To Main Tabs
         </Text>
       </TouchableOpacity>
-
     </View>
   );
 }

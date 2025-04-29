@@ -318,13 +318,24 @@ export const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 16,
   },
-  checkButton: {
-    color: '#00ff00',
-    fontWeight: 'bold',
-    fontSize: 28,
-    includeFontPadding: false,
+  rememberMeToggle: {
+    color: '#0f0',
+    fontFamily: 'Courier',
+    fontSize: 16,
   },
-  
+  rememberMeWrapper: {
+    marginTop: 10,
+    marginBottom: 20,
+    paddingRight: 4,
+  },
+  settingsIcon: {
+    position: 'absolute',
+    top: 15,
+    right: 10,
+    padding: 8,
+    zIndex: 10,
+  },
+    
   
       
 });

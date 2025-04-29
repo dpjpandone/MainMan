@@ -13,6 +13,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { styles } from '../styles/globalStyles';
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_KEY } from '../utils/supaBaseConfig';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 // Initialize Supabase client
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -141,6 +142,13 @@ export default function HomeScreen({ navigation }) {
   return (
     <View style={styles.container}>
       <Text style={styles.header}>Machines</Text>
+     
+      <TouchableOpacity
+  onPress={() => navigation.reset({ index: 0, routes: [{ name: 'Login' }] })}
+  style={styles.settingsIcon}
+>
+  <MaterialCommunityIcons name="cog-outline" size={26} color="#0f0" />
+</TouchableOpacity>
 
       <FlatList
         data={machines}
@@ -161,9 +169,6 @@ export default function HomeScreen({ navigation }) {
         ListEmptyComponent={<Text style={styles.emptyListText}>No machines added</Text>}
       />
 
-      <TouchableOpacity style={styles.buttonWhite} onPress={handleDevLogout}>
-        <Text style={styles.buttonText}>Change Credentials</Text>
-      </TouchableOpacity>
 
       <TouchableOpacity style={styles.addBtn} onPress={() => setModalVisible(true)}>
         <Text style={styles.addBtnText}>+ Add Machine</Text>
