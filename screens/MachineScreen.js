@@ -1,19 +1,20 @@
-//  MachineScreen.js
+// MachineScreen.js
 
 import React, { useState, useCallback, useEffect } from 'react';
-import { View, Text, FlatList, TouchableOpacity, Modal, TextInput, Alert} from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, Modal, TextInput, Alert } from 'react-native';
 import { styles } from '../styles/globalStyles';
 import ProcedureCard from '../components/ProcedureCard';
-import * as FileSystem from 'expo-file-system';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRoute, useFocusEffect } from '@react-navigation/native';
-import { SUPABASE_URL, SUPABASE_BUCKET, SUPABASE_KEY } from '../utils/supaBaseConfig';
+import { SUPABASE_URL, SUPABASE_KEY } from '../utils/supaBaseConfig';
+import AsyncStorage from '@react-native-async-storage/async-storage'; // 🔥 Add this line
 import { StatusBar } from 'expo-status-bar';
 
 export default function MachineScreen() {
   const route = useRoute();
   const { machineId } = route.params;
+
   const [machine, setMachine] = useState(null);
+  const [procedures, setProcedures] = useState([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [name, setName] = useState('');
   const [interval, setInterval] = useState('');
@@ -21,154 +22,203 @@ export default function MachineScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      loadMachine();
-    }, [machineId])
+      loadMachineAndProcedures();
+    }, [])
   );
+    
+  const loadMachineAndProcedures = async () => {
+    try {
+      // Fetch machine name
+      const machineResponse = await fetch(`${SUPABASE_URL}/rest/v1/machines?id=eq.${machineId}`, {
+        method: 'GET',
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`,
+        },
+      });
+      const machineData = await machineResponse.json();
+      if (machineData.length === 0) {
+        console.error('Machine not found.');
+        return;
+      }
 
-  
-  const loadMachine = async () => {
-    const data = await AsyncStorage.getItem('machines');
-    if (!data) return;
-    const machines = JSON.parse(data);
-    const found = machines.find((m) => m.id === machineId);
-    if (!found) return;
-  
-    found.procedures = [...(found.procedures || [])].sort((a, b) => {
+      // Fetch procedures
+      const procedureResponse = await fetch(`${SUPABASE_URL}/rest/v1/procedures?machine_id=eq.${machineId}&order=last_completed.desc.nullsfirst`, {
+        method: 'GET',
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`,
+        },
+      });
+      const procedureData = await procedureResponse.json();
+
+      setMachine(machineData[0]);
+      setProcedures(procedureData);
+    } catch (error) {
+      console.error('Error loading machine and procedures:', error);
+    }
+  };
+
+  const markComplete = async (proc) => {
+    try {
       const now = new Date();
-    
-      const getOverdueDays = (proc) => {
-        if (!proc.lastCompleted) return Infinity;
-        const last = new Date(proc.lastCompleted);
-        return (now - last) / (1000 * 60 * 60 * 24) - proc.intervalDays;
-      };
-    
-      return getOverdueDays(b) - getOverdueDays(a); // Descending
-    });
-    
-
+      const dueDate = new Date();
+      dueDate.setDate(now.getDate() + parseInt(proc.interval_days || 0));
   
-    console.log('🔍 [loadMachine] Machine loaded:', found);
-    console.log('🔍 [loadMachine] Procedures after filtering:', found.procedures);
+      console.log('Marking complete for procedure ID:', proc.id);
+      console.log('Setting last_completed:', now.toISOString());
+      console.log('Setting due_date:', dueDate.toISOString());
   
-    setMachine(found);
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/procedures?id=eq.${proc.id}`, {
+        method: 'PATCH',
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal',
+        },
+        body: JSON.stringify({
+          last_completed: now.toISOString(),
+          due_date: dueDate.toISOString(),
+        }),
+      });
+  
+      console.log('Supabase patch response:', response.status);
+  
+      loadMachineAndProcedures();
+    } catch (error) {
+      console.error('Failed to mark procedure complete:', error);
+    }
   };
   
-
-  const markComplete = async (procId) => {
-    const data = await AsyncStorage.getItem('machines');
-    const machines = JSON.parse(data);
-    const updated = machines.map((m) => {
-      if (m.id !== machineId) return m;
-      return {
-        ...m,
-        procedures: m.procedures.filter((p) => {
-          if (p.id !== procId) return true;
-          p.lastCompleted = new Date().toISOString();
-          return true;
-        })
-      };
-    });
-    await AsyncStorage.setItem('machines', JSON.stringify(updated));
-    loadMachine();
-  };
-
   const deleteProcedure = async (procId) => {
-    const data = await AsyncStorage.getItem('machines');
-    const machines = JSON.parse(data);
-    const updated = machines.map((m) => {
-      if (m.id !== machineId) return m;
-      return {
-        ...m,
-        procedures: m.procedures.filter((p) => p.id !== procId)
-      };
-    });
-    await AsyncStorage.setItem('machines', JSON.stringify(updated));
-    loadMachine();
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/procedures?id=eq.${procId}`, {
+        method: 'DELETE',
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`,
+          'Prefer': 'return=minimal',
+        },
+      });
+
+      loadMachineAndProcedures();
+    } catch (error) {
+      console.error('Failed to delete procedure:', error);
+    }
   };
 
-  const addProcedure = async () => {
+ const addProcedure = async () => {
     if (!name.trim() || !interval) return;
-    const newProc = {
-      id: `${Date.now()}`,
-      name: name.trim(),
-      intervalDays: parseInt(interval),
-      description,
-      lastCompleted: null,
-    };
-    const data = await AsyncStorage.getItem('machines');
-    const machines = JSON.parse(data);
-    const updated = machines.map((m) =>
-      m.id === machineId ? { ...m, procedures: [...m.procedures, newProc] } : m
-    );
-    await AsyncStorage.setItem('machines', JSON.stringify(updated));
-    setModalVisible(false);
-    setName(''); setInterval(''); setDescription('');
-    loadMachine();
+  
+    try {
+      // 🔥 Load companyId first
+      const session = await AsyncStorage.getItem('loginData');
+      const parsedSession = JSON.parse(session);
+      const companyId = parsedSession?.companyId;
+  
+      if (!companyId) {
+        console.error('No companyId found for adding procedure.');
+        return;
+      }
+  
+      await fetch(`${SUPABASE_URL}/rest/v1/procedures`, {
+        method: 'POST',
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal',
+        },
+        body: JSON.stringify({
+          machine_id: machineId,
+          procedure_name: name.trim(),
+          description,
+          interval_days: parseInt(interval),
+          last_completed: null,
+          due_date: null,
+          image_urls: [],
+          company_id: companyId,
+        }),
+      });
+  
+      setModalVisible(false);
+      setName('');
+      setInterval('');
+      setDescription('');
+      loadMachineAndProcedures();
+  
+    } catch (error) {
+      console.error('Failed to add procedure:', error);
+    }
   };
-
+  
   const renderProcedure = ({ item }) => (
-    <ProcedureCard item={{ ...item, machineId }} onComplete={markComplete} onDelete={deleteProcedure} refreshMachine={loadMachine} />
+<ProcedureCard
+  item={{ ...item, machineId }}
+  onComplete={() => markComplete(item)}
+  onDelete={deleteProcedure}
+/>
   );
 
   return (
     <View style={styles.container}>
-       <StatusBar backgroundColor="#000" style="light" />
+      <StatusBar backgroundColor="#000" style="light" />
       <Text style={styles.header}>{machine?.name}</Text>
-       <FlatList data={(machine?.procedures || []).filter(p => !p.isNonRoutine)}
+
+      <FlatList
+        data={procedures.filter(p => !p.is_non_routine)}
         keyExtractor={(item) => item.id}
-         renderItem={renderProcedure}
-/>
-
-<TouchableOpacity style={styles.addBtn} onPress={() => setModalVisible(true)}>
-  <Text style={styles.addBtnText}>+ Add Procedure</Text>
-</TouchableOpacity>
-
-<Modal 
-  visible={modalVisible} 
-  transparent 
-  animationType="slide" 
-  statusBarTranslucent
->
-  <View style={styles.modalOverlay}>
-    <View style={styles.modalContainer}>
-      <Text style={styles.modalTitle}>New Procedure</Text>
-      
-      <TextInput 
-        placeholder="Procedure Name" 
-        placeholderTextColor="#777" 
-        value={name} 
-        onChangeText={setName} 
-        style={styles.input} 
-      />
-      <TextInput 
-        placeholder="Interval (days)" 
-        placeholderTextColor="#777" 
-        keyboardType="numeric" 
-        value={interval} 
-        onChangeText={setInterval} 
-        style={styles.input} 
-      />
-      <TextInput 
-        placeholder="Description" 
-        placeholderTextColor="#777" 
-        value={description} 
-        onChangeText={setDescription} 
-        style={styles.input} 
+        renderItem={renderProcedure}
       />
 
-      <TouchableOpacity style={styles.button} onPress={addProcedure}>
-        <Text style={styles.buttonText}>Save</Text>
+      <TouchableOpacity style={styles.addBtn} onPress={() => setModalVisible(true)}>
+        <Text style={styles.addBtnText}>+ Add Procedure</Text>
       </TouchableOpacity>
-      
-      <TouchableOpacity onPress={() => setModalVisible(false)}>
-        <Text style={styles.cancelText}>Cancel</Text>
-      </TouchableOpacity>
+
+      <Modal
+        visible={modalVisible}
+        transparent
+        animationType="slide"
+        statusBarTranslucent
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>New Procedure</Text>
+
+            <TextInput
+              placeholder="Procedure Name"
+              placeholderTextColor="#777"
+              value={name}
+              onChangeText={setName}
+              style={styles.input}
+            />
+            <TextInput
+              placeholder="Interval (days)"
+              placeholderTextColor="#777"
+              keyboardType="numeric"
+              value={interval}
+              onChangeText={setInterval}
+              style={styles.input}
+            />
+            <TextInput
+              placeholder="Description"
+              placeholderTextColor="#777"
+              value={description}
+              onChangeText={setDescription}
+              style={styles.input}
+            />
+
+            <TouchableOpacity style={styles.button} onPress={addProcedure}>
+              <Text style={styles.buttonText}>Save</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={() => setModalVisible(false)}>
+              <Text style={styles.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
-  </View>
-</Modal>
-</View>
-);
+  );
 }
-
-
-

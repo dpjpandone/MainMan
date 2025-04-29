@@ -1,4 +1,5 @@
 // screens/LoginScreen.js
+
 import React, { useState, useContext } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Alert } from 'react-native';
 import { styles } from '../styles/globalStyles';
@@ -40,7 +41,7 @@ export default function LoginScreen({ navigation }) {
       const user = data.user;
       const companyId = user?.user_metadata?.company_id;
       const role = user?.user_metadata?.role;
-      const username = user?.user_metadata?.username || ''; // optional if you store it
+      const username = user?.user_metadata?.username || '';
 
       if (!companyId || !role) {
         Alert.alert('Login Error', 'Missing company or role information.');
@@ -55,11 +56,11 @@ export default function LoginScreen({ navigation }) {
       };
 
       await AsyncStorage.setItem('loginData', JSON.stringify(sessionData));
-      setLoginData(sessionData); // save to context memory too
+      setLoginData(sessionData);
 
       navigation.reset({
         index: 0,
-        routes: [{ name: 'Home' }],
+        routes: [{ name: 'MainTabs' }],  // ✅ fixed!
       });
 
     } catch (error) {
@@ -118,7 +119,7 @@ export default function LoginScreen({ navigation }) {
         <AddUserModal
           visible={showAddUserModal}
           onClose={() => setShowAddUserModal(false)}
-          companyId={loginData.companyId} // ✅ Correctly passed from memory
+          companyId={loginData.companyId}
         />
       )}
 
@@ -126,11 +127,11 @@ export default function LoginScreen({ navigation }) {
       <TouchableOpacity onPress={() => {
         navigation.reset({
           index: 0,
-          routes: [{ name: 'Home' }],
+          routes: [{ name: 'MainTabs' }],  // ✅ fixed here too!
         });
       }}>
         <Text style={{ color: '#0f0', textAlign: 'center', marginTop: 40 }}>
-          [DEV] Go To Home Screen
+          [DEV] Go To Main Tabs
         </Text>
       </TouchableOpacity>
 

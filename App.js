@@ -1,3 +1,5 @@
+// App.js
+
 import 'react-native-reanimated'; // ✅ must be FIRST
 import React, { useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
@@ -7,7 +9,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Text } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { StatusBar } from 'expo-status-bar'; // ✅ correct!
+import { StatusBar } from 'expo-status-bar';
 import LoginScreen from './screens/LoginScreen';
 import { AppContext } from './contexts/AppContext';
 
@@ -19,18 +21,19 @@ import ChecklistScreen from './screens/ChecklistScreen';
 import UploadTestScreen from './screens/UploadTestScreen';
 import GestureTestScreen from './screens/GestureTestScreen';
 
+// Create Navigators
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
+const MachinesStack = createNativeStackNavigator();
 
 function MachinesStackNavigator() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="Home" component={HomeScreen} />
-      <Stack.Screen name="Machine" component={MachineScreen} />
-      <Stack.Screen name="UploadTest" component={UploadTestScreen} />
-      <Stack.Screen name="GestureTest" component={GestureTestScreen} />
-      <Stack.Screen name="Login" component={LoginScreen} />
-    </Stack.Navigator>
+    <MachinesStack.Navigator screenOptions={{ headerShown: false }}>
+      <MachinesStack.Screen name="Home" component={HomeScreen} />
+      <MachinesStack.Screen name="MachineScreen" component={MachineScreen} />
+      <MachinesStack.Screen name="UploadTest" component={UploadTestScreen} />
+      <MachinesStack.Screen name="GestureTest" component={GestureTestScreen} />
+    </MachinesStack.Navigator>
   );
 }
 
@@ -87,18 +90,17 @@ export default function App() {
 
   return (
     <AppContext.Provider value={{ loginData, setLoginData }}>
-<NavigationContainer>
-  <Stack.Navigator
-    screenOptions={{
-      headerShown: false, // 🚫 No white headers on any screen
-    }}
-    initialRouteName="Login"
-  >
-    <Stack.Screen name="Login" component={LoginScreen} />
-    <Stack.Screen name="Home" component={HomeScreen} />
-    {/* Add other screens here */}
-  </Stack.Navigator>
-</NavigationContainer>
+      <SafeAreaProvider>
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <NavigationContainer>
+            <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Login">
+              <Stack.Screen name="Login" component={LoginScreen} />
+              <Stack.Screen name="MainTabs" component={TabNavigator} />
+            </Stack.Navigator>
+          </NavigationContainer>
+          <StatusBar style="light" backgroundColor="#000" />
+        </GestureHandlerRootView>
+      </SafeAreaProvider>
     </AppContext.Provider>
   );
 }

@@ -58,7 +58,7 @@ export default function HomeScreen({ navigation }) {
   }, [navigation]);
 
   const goToMachine = (machineId) => {
-    navigation.navigate('Machine', { machineId });
+    navigation.navigate('MachineScreen', { machineId });
   };
 
   const addMachine = async () => {
