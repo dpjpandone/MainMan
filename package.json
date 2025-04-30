@@ -32,7 +32,8 @@
     "react-native-snap-carousel": "^3.9.1",
     "react-native-web": "~0.19.13",
     "react-native-zoomable-view": "^0.3.1",
-    "expo-secure-store": "~14.0.1"
+    "expo-secure-store": "~14.0.1",
+    "expo-document-picker": "~13.0.3"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0"

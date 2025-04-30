@@ -1,9 +1,52 @@
 //imageUtils.js
-import React from 'react';
 import { View, Image, TouchableOpacity, Text } from 'react-native';
 import { styles } from '../styles/globalStyles';
 import { Modal } from 'react-native';
+import React, { useState } from 'react';
+import { SUPABASE_URL, SUPABASE_BUCKET, SUPABASE_KEY } from './supaBaseConfig';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
+export function FullscreenImageViewerController({ imageUrls }) {
+  const [selectedImageIndex, setSelectedImageIndex] = useState(null);
+  const [scale, setScale] = useState(1);
+  const [rotation, setRotation] = useState(0);
+  const [panX, setPanX] = useState(0);
+  const [panY, setPanY] = useState(0);
 
+  const handleClose = () => {
+    setSelectedImageIndex(null);
+    setScale(1);
+    setRotation(0);
+    setPanX(0);
+    setPanY(0);
+  };
+
+  return (
+    <>
+      {selectedImageIndex !== null && (
+        <FullscreenImageViewer
+          visible={true}
+          uri={imageUrls[selectedImageIndex]}
+          onClose={handleClose}
+          panX={panX}
+          panY={panY}
+          scale={scale}
+          rotation={rotation}
+          setPanX={setPanX}
+          setPanY={setPanY}
+          setScale={setScale}
+          setRotation={setRotation}
+        />
+      )}
+
+      {/* exposes the setSelectedImageIndex globally so components can open the fullscreen viewer  */}
+      
+      {typeof window !== 'undefined' && (
+        (window._setSelectedImageIndex = setSelectedImageIndex)
+      )}
+    </>
+  );
+}
 export function FullscreenImageViewer({
   visible,
   uri,
@@ -110,4 +153,81 @@ export function ImageGridViewer({ imageUrls, imageEditMode, onDeleteImage, onSel
       ))}
     </View>
   );
+}
+// Delete Image Helper
+export async function deleteProcedureImage({ uriToDelete, imageUrls, procedureId, setImageUrls, refreshMachine }) {
+  try {
+    const imageName = uriToDelete.split('/').pop();
+    const deleteUrl = `${SUPABASE_URL}/storage/v1/object/${SUPABASE_BUCKET}/${imageName}`;
+    await fetch(deleteUrl, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${SUPABASE_KEY}` }
+    });
+
+    const updatedImages = imageUrls.filter(uri => uri !== uriToDelete);
+    setImageUrls(updatedImages);
+
+    await fetch(`${SUPABASE_URL}/rest/v1/procedures?id=eq.${procedureId}`, {
+      method: 'PATCH',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal',
+      },
+      body: JSON.stringify({ image_urls: updatedImages }),
+    });
+
+    if (refreshMachine) refreshMachine();
+  } catch (error) {
+    console.error('Failed to delete image:', error);
+  }
+}
+
+// Upload Image Helper
+export async function uploadProcedureImage({ procedureId, imageUrls, setImageUrls, scrollToEnd }) {
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    allowsEditing: false,
+    quality: 0.7,
+  });
+
+  if (!result.canceled && result.assets?.length > 0) {
+    const uri = result.assets[0].uri;
+    const fileName = `${procedureId}-${Date.now()}.jpg`;
+    const uploadUrl = `${SUPABASE_URL}/storage/v1/object/${SUPABASE_BUCKET}/${fileName}`;
+
+    const response = await FileSystem.uploadAsync(uploadUrl, uri, {
+      httpMethod: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'image/jpeg',
+        'x-upsert': 'true',
+      },
+      uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+    });
+
+    if (response.status === 200) {
+      const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_BUCKET}/${fileName}`;
+      const updated = [...imageUrls, publicUrl];
+      setImageUrls(updated);
+
+      await fetch(`${SUPABASE_URL}/rest/v1/procedures?id=eq.${procedureId}`, {
+        method: 'PATCH',
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal',
+        },
+        body: JSON.stringify({ image_urls: updated }),
+      });
+
+      setTimeout(() => {
+        if (scrollToEnd) scrollToEnd();
+      }, 300);
+    } else {
+      alert(`Upload failed: ${response.status}`);
+    }
+  }
 }

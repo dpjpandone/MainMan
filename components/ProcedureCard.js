@@ -2,10 +2,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, Modal, Alert, Image, ScrollView, TextInput, KeyboardAvoidingView, Platform, StatusBar, Keyboard } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
 import { styles } from '../styles/globalStyles';
-import { FullscreenImageViewer, ImageGridViewer } from '../utils/imageUtils';
+import { FullscreenImageViewerController, ImageGridViewer, deleteProcedureImage, uploadProcedureImage } from '../utils/imageUtils';
 import { SUPABASE_URL, SUPABASE_BUCKET, SUPABASE_KEY } from '../utils/supaBaseConfig';
 import { InteractionManager } from 'react-native';
 
@@ -17,11 +15,6 @@ export default function ProcedureCard({ item, navigation, isPastDue: initialPast
   const [imageEditMode, setImageEditMode] = useState(false);
   const [description, setDescription] = useState(item.description || '');
   const [imageUrls, setImageUrls] = useState(item.imageUrls || []);
-  const [selectedImageIndex, setSelectedImageIndex] = useState(null);
-  const [fullscreenScale, setFullscreenScale] = useState(1);
-  const [fullscreenRotation, setFullscreenRotation] = useState(0);
-  const [panX, setPanX] = useState(0);
-  const [panY, setPanY] = useState(0);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const galleryScrollRef = useRef(null);
 
@@ -91,43 +84,18 @@ export default function ProcedureCard({ item, navigation, isPastDue: initialPast
     setModalVisible(true);
   };
   
-  const handleDeleteImage = (uriToDelete) => {
-    Alert.alert("Delete Image", "Are you sure you want to delete this image?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete", style: "destructive", onPress: async () => {
-          try {
-            const imageName = uriToDelete.split('/').pop();
-            const deleteUrl = `${SUPABASE_URL}/storage/v1/object/${SUPABASE_BUCKET}/${imageName}`;
-            await fetch(deleteUrl, {
-              method: 'DELETE',
-              headers: { 'Authorization': `Bearer ${SUPABASE_KEY}` }
-            });
-  
-            const updatedImages = imageUrls.filter(uri => uri !== uriToDelete);
-            setImageUrls(updatedImages);
-  
-            // 🌐 New: Update procedure's image_urls field in Supabase
-            await fetch(`${SUPABASE_URL}/rest/v1/procedures?id=eq.${item.id}`, {
-              method: 'PATCH',
-              headers: {
-                'apikey': SUPABASE_KEY,
-                'Authorization': `Bearer ${SUPABASE_KEY}`,
-                'Content-Type': 'application/json',
-                'Prefer': 'return=minimal',
-              },
-              body: JSON.stringify({ image_urls: updatedImages }),
-            });
-  
-            refreshMachine();
-          } catch (error) {
-            console.error('Failed to delete image:', error);
-          }
-        }
-      }
-    ]);
+  const handleDeleteImage = (uri) => {
+    deleteProcedureImage({
+      uriToDelete: uri,
+      imageUrls,
+      procedureId: item.id,
+      setImageUrls,
+      refreshMachine: () => {
+        if (typeof refreshMachine === 'function') refreshMachine();
+      },
+    });
   };
-  
+    
   const saveDescription = async () => {
     try {
       await fetch(`${SUPABASE_URL}/rest/v1/procedures?id=eq.${item.id}`, {
@@ -162,58 +130,14 @@ export default function ProcedureCard({ item, navigation, isPastDue: initialPast
   };
 
   const handleImagePick = async () => {
-    setImageEditMode(false);
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: false,
-        quality: 0.7,
-      });
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const uri = result.assets[0].uri;
-        const fileName = `${item.id}-${Date.now()}.jpg`;
-        const uploadUrl = `${SUPABASE_URL}/storage/v1/object/${SUPABASE_BUCKET}/${fileName}`;
-
-        const response = await FileSystem.uploadAsync(uploadUrl, uri, {
-          httpMethod: 'PUT',
-          headers: {
-            'Authorization': `Bearer ${SUPABASE_KEY}`,
-            'Content-Type': 'image/jpeg',
-            'x-upsert': 'true',
-          },
-          uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
-        });
-
-        if (response.status === 200) {
-          const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_BUCKET}/${fileName}`;
-          const updatedImages = [...imageUrls, publicUrl];
-          setImageUrls(updatedImages);
-
-          // 🌐 Update Supabase procedure record with new images
-          await fetch(`${SUPABASE_URL}/rest/v1/procedures?id=eq.${item.id}`, {
-            method: 'PATCH',
-            headers: {
-              'apikey': SUPABASE_KEY,
-              'Authorization': `Bearer ${SUPABASE_KEY}`,
-              'Content-Type': 'application/json',
-              'Prefer': 'return=minimal',
-            },
-            body: JSON.stringify({ image_urls: updatedImages }),
-          });
-
-          setTimeout(() => {
-            galleryScrollRef.current?.scrollToEnd({ animated: true });
-          }, 300);
-        } else {
-          alert(`Upload failed: ${response.status}`);
-        }
-      }
-    } catch (err) {
-      alert('Upload error: ' + err.message);
-    }
+    await uploadProcedureImage({
+      procedureId: item.id,
+      imageUrls,
+      setImageUrls,
+      scrollToEnd: scrollToGalleryEnd,
+    });
   };
-  
+    
   //main return
 
   return (
@@ -311,17 +235,15 @@ export default function ProcedureCard({ item, navigation, isPastDue: initialPast
                   <ScrollView ref={galleryScrollRef}>
                     {imageUrls.length > 0 ? (
                       <ImageGridViewer
-                        imageUrls={imageUrls}
-                        imageEditMode={imageEditMode}
-                        onDeleteImage={handleDeleteImage}
-                        onSelectImage={(index) => {
-                          setSelectedImageIndex(index);
-                          setFullscreenScale(1);
-                          setFullscreenRotation(0);
-                          setPanX(0);
-                          setPanY(0);
-                        }}
-                      />
+  imageUrls={imageUrls}
+  imageEditMode={imageEditMode}
+  onDeleteImage={handleDeleteImage}
+  onSelectImage={(index) => {
+    if (typeof window !== 'undefined' && window._setSelectedImageIndex) {
+      window._setSelectedImageIndex(index);
+    }
+  }}
+/>
                     ) : (
                       <Text style={{ color: '#888', textAlign: 'center' }}>No Images</Text>
                     )}
@@ -381,21 +303,7 @@ export default function ProcedureCard({ item, navigation, isPastDue: initialPast
           </KeyboardAvoidingView>
         </View>
       </Modal>
-
-      {/* Fullscreen Viewer */}
-      <FullscreenImageViewer
-        visible={selectedImageIndex !== null}
-        uri={imageUrls[selectedImageIndex]}
-        onClose={() => setSelectedImageIndex(null)}
-        panX={panX}
-        panY={panY}
-        scale={fullscreenScale}
-        rotation={fullscreenRotation}
-        setPanX={setPanX}
-        setPanY={setPanY}
-        setScale={setFullscreenScale}
-        setRotation={setFullscreenRotation}
-      />
-    </View>
+      <FullscreenImageViewerController imageUrls={imageUrls} />
+      </View>
   );
 }
