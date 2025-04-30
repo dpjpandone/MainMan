@@ -21,6 +21,10 @@ export function FullscreenImageViewerController({ imageUrls }) {
     setPanY(0);
   };
 
+  if (typeof window !== 'undefined') {
+    window._setSelectedImageIndex = setSelectedImageIndex;
+  }
+  
   return (
     <>
       {selectedImageIndex !== null && (
@@ -38,15 +42,9 @@ export function FullscreenImageViewerController({ imageUrls }) {
           setRotation={setRotation}
         />
       )}
-
-      {/* exposes the setSelectedImageIndex globally so components can open the fullscreen viewer  */}
-      
-      {typeof window !== 'undefined' && (
-        (window._setSelectedImageIndex = setSelectedImageIndex)
-      )}
     </>
   );
-}
+  }
 export function FullscreenImageViewer({
   visible,
   uri,

@@ -201,8 +201,28 @@ export default function ProcedureCard({ item, navigation, isPastDue: initialPast
 
       {/* Section 3: Fullscreen Modal */}
       <Modal visible={modalVisible} transparent={false} animationType="fade">
-        <View style={styles.modalOverlay}>
-          <StatusBar backgroundColor="#000" barStyle="light-content" />
+      <View style={styles.modalOverlay}>
+  <StatusBar backgroundColor="#000" barStyle="light-content" />
+
+  {editMode && (
+  <TouchableOpacity
+  style={{
+    position: 'absolute',
+    top: 8,
+    right: 13,
+    zIndex: 10,
+    backgroundColor: '#000', // solid black
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#0f0', // neon green border
+  }}
+  onPress={handleBack}
+>
+  <Text style={{ color: '#0f0', fontSize: 16, fontWeight: 'bold' }}>✕</Text>
+</TouchableOpacity>
+)}          
           <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             style={[styles.modalContainer, keyboardVisible ? { paddingBottom: 80 } : null]}
@@ -229,80 +249,88 @@ export default function ProcedureCard({ item, navigation, isPastDue: initialPast
                 </ScrollView>
               </View>
 
-              {/* Image Gallery Section */}
-              {!keyboardVisible && (
-                <View style={{ height: 200, marginTop: 10 }}>
-                  <ScrollView ref={galleryScrollRef}>
-                    {imageUrls.length > 0 ? (
-                      <ImageGridViewer
-  imageUrls={imageUrls}
-  imageEditMode={imageEditMode}
-  onDeleteImage={handleDeleteImage}
-  onSelectImage={(index) => {
-    if (typeof window !== 'undefined' && window._setSelectedImageIndex) {
-      window._setSelectedImageIndex(index);
-    }
-  }}
-/>
-                    ) : (
-                      <Text style={{ color: '#888', textAlign: 'center' }}>No Images</Text>
-                    )}
-                  </ScrollView>
-                </View>
-              )}
-            </View>
+{/* Image Gallery Section */}
+{!keyboardVisible && (
+  <View style={{ height: 200, marginTop: 10 }}>
+    <ScrollView ref={galleryScrollRef}>
+      {imageUrls.length > 0 ? (
+        <ImageGridViewer
+          imageUrls={imageUrls}
+          imageEditMode={imageEditMode}
+          onDeleteImage={handleDeleteImage}
+          onSelectImage={(index) => {
+            if (typeof window !== 'undefined') {
+              window._setSelectedImageIndex(index);
+            }
+          }}
+                  />
+      ) : (
+        <Text style={{ color: '#888', textAlign: 'center' }}>No Images</Text>
+      )}
+    </ScrollView>
+  </View>
+)}
 
-            {/* Fixed Bottom Buttons */}
-            {!keyboardVisible && (
-              <View style={styles.fixedButtonRow}>
-                {!editMode ? (
-                  <>
-                    <TouchableOpacity style={styles.fixedButton} onPress={() => setEditMode(true)}>
-                      <Text style={styles.buttonText}>Edit</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.fixedButton} onPress={handleBack}>
-                      <Text style={styles.buttonText}>Back</Text>
-                    </TouchableOpacity>
-                  </>
-                ) : (
-                  <>
-                    <TouchableOpacity
-                      style={styles.fixedButton}
-                      onPress={async () => {
-                        await handleImagePick();
-                        scrollToGalleryEnd();
-                      }}
-                    >
-                      <Text style={styles.buttonText}>Add</Text>
-                    </TouchableOpacity>
+{/* Fixed Bottom Buttons */}
+{!keyboardVisible && (
+  <View style={styles.fixedButtonRow}>
+    {!editMode ? (
+      <>
+        <TouchableOpacity style={styles.fixedButton} onPress={() => setEditMode(true)}>
+          <Text style={styles.buttonText}>Edit</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.fixedButton} onPress={handleBack}>
+          <Text style={styles.buttonText}>Back</Text>
+        </TouchableOpacity>
+      </>
+    ) : (
+      <>
+        <TouchableOpacity
+          style={styles.fixedButton}
+          onPress={async () => {
+            await handleImagePick();
+            scrollToGalleryEnd();
+          }}
+        >
+          <Text style={styles.buttonText}>Image</Text>
+        </TouchableOpacity>
 
-                    <TouchableOpacity
-                      style={[styles.fixedButton, styles.deleteButton]}
-                      onPress={() => {
-                        setImageEditMode(prev => {
-                          const newMode = !prev;
-                          if (newMode) scrollToGalleryEnd();
-                          return newMode;
-                        });
-                      }}
-                    >
-                      <Text style={styles.buttonText}>Delete</Text>
-                    </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.fixedButton}
+          onPress={() => {
+            alert("Add Document coming soon...");
+            // Later will trigger file picker
+          }}
+        >
+          <Text style={styles.buttonText}>Files</Text>
+        </TouchableOpacity>
 
-                    <TouchableOpacity style={styles.fixedButton} onPress={saveDescription}>
-                      <Text style={styles.buttonText}>Save</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.fixedButton} onPress={handleBack}>
-                      <Text style={styles.buttonText}>Back</Text>
-                    </TouchableOpacity>
-                  </>
-                )}
-              </View>
-            )}
+        <TouchableOpacity
+          style={[styles.fixedButton, styles.deleteButton]}
+          onPress={() => {
+            setImageEditMode(prev => {
+              const newMode = !prev;
+              if (newMode) scrollToGalleryEnd();
+              return newMode;
+            });
+          }}
+        >
+          <Text style={styles.buttonText}>Delete</Text>
+        </TouchableOpacity>
 
+        <TouchableOpacity style={styles.fixedButton} onPress={saveDescription}>
+          <Text style={styles.buttonText}>Save</Text>
+        </TouchableOpacity>
+      </>
+    )}
+  </View>
+)}
+
+           </View> 
           </KeyboardAvoidingView>
         </View>
       </Modal>
+
       <FullscreenImageViewerController imageUrls={imageUrls} />
       </View>
   );
