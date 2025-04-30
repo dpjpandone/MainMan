@@ -6,6 +6,7 @@ import { styles } from '../styles/globalStyles';
 import { FullscreenImageViewerController, ImageGridViewer, deleteProcedureImage, uploadProcedureImage } from '../utils/imageUtils';
 import { SUPABASE_URL, SUPABASE_BUCKET, SUPABASE_KEY } from '../utils/supaBaseConfig';
 import { InteractionManager } from 'react-native';
+import { uploadProcedureFile } from '../utils/fileUtils';
 
 export default function ProcedureCard({ item, navigation, isPastDue: initialPastDue, onComplete, onDelete }){
 
@@ -17,6 +18,8 @@ export default function ProcedureCard({ item, navigation, isPastDue: initialPast
   const [imageUrls, setImageUrls] = useState(item.imageUrls || []);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const galleryScrollRef = useRef(null);
+  const [fileUrls, setFileUrls] = useState(item.fileUrls || []);
+
 
   const now = new Date();
   const lastCompleted = item.last_completed ? new Date(item.last_completed) : null;
@@ -296,14 +299,18 @@ export default function ProcedureCard({ item, navigation, isPastDue: initialPast
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={styles.fixedButton}
-          onPress={() => {
-            alert("Add Document coming soon...");
-            // Later will trigger file picker
-          }}
-        >
-          <Text style={styles.buttonText}>Files</Text>
-        </TouchableOpacity>
+  style={styles.fixedButton}
+  onPress={async () => {
+    await uploadProcedureFile({
+      procedureId: item.id,
+      fileUrls,
+      setFileUrls,
+      scrollToEnd: scrollToGalleryEnd,
+    });
+  }}
+  >
+  <Text style={styles.buttonText}>Files</Text>
+</TouchableOpacity>
 
         <TouchableOpacity
           style={[styles.fixedButton, styles.deleteButton]}
