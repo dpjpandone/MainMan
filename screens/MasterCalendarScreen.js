@@ -246,9 +246,9 @@ export default function MasterCalendarScreen() {
             </View>
             <TouchableOpacity
   onPress={() => deleteNonRoutineProcedure(item.id)}
-  style={{ padding: 10 }}
+  style={styles.deleteButtonCompact}
 >
-  <Text style={{ color: 'red', fontWeight: 'bold', fontSize: 28 }}>✕</Text>
+  <Text style={styles.deleteButtonText}>✕</Text>
 </TouchableOpacity>
           </View>
 

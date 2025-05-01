@@ -368,5 +368,15 @@ export const styles = StyleSheet.create({
     backgroundColor: '#ff0000',
     transform: [{ rotate: '-45deg' }],
   },
-    
-});
+  deleteButtonCompact: {
+    backgroundColor: '#000',
+    borderRadius: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  deleteButtonText: {
+    color: '#f00',
+    fontWeight: 'bold',
+    fontSize: 22,
+  },
+  });
