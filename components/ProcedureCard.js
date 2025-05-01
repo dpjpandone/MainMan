@@ -3,10 +3,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, Modal, Alert, Image, ScrollView, TextInput, KeyboardAvoidingView, Platform, StatusBar, Keyboard } from 'react-native';
 import { styles } from '../styles/globalStyles';
-import { FullscreenImageViewerController, ImageGridViewer, deleteProcedureImage, uploadProcedureImage } from '../utils/imageUtils';
+import { FullscreenImageViewerController, deleteProcedureImage, uploadProcedureImage } from '../utils/imageUtils';
 import { SUPABASE_URL, SUPABASE_BUCKET, SUPABASE_KEY } from '../utils/supaBaseConfig';
 import { InteractionManager } from 'react-native';
-import { uploadProcedureFile } from '../utils/fileUtils';
+import { uploadProcedureFile, deleteProcedureFile, AttachmentGridViewer, FileLabelPrompt } from '../utils/fileUtils';
 
 export default function ProcedureCard({ item, navigation, isPastDue: initialPastDue, onComplete, onDelete }){
 
@@ -19,7 +19,9 @@ export default function ProcedureCard({ item, navigation, isPastDue: initialPast
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const galleryScrollRef = useRef(null);
   const [fileUrls, setFileUrls] = useState(item.fileUrls || []);
-
+  const [fileLabels, setFileLabels] = useState(item.fileLabels || []);
+  const [labelPromptVisible, setLabelPromptVisible] = useState(false);
+  const [pendingUploadLabel, setPendingUploadLabel] = useState('');
 
   const now = new Date();
   const lastCompleted = item.last_completed ? new Date(item.last_completed) : null;
@@ -75,17 +77,20 @@ export default function ProcedureCard({ item, navigation, isPastDue: initialPast
         const latest = data[0];
         setDescription(latest.description || '');
         setImageUrls(latest.image_urls || []);
+        setFileUrls(latest.file_urls || []);
+        setFileLabels(latest.file_labels || []);
       } else {
         console.error('Procedure not found.');
       }
+  
+      setEditMode(false);
+      setImageEditMode(false);
+      setModalVisible(true);
     } catch (error) {
       console.error('Error loading latest procedure:', error);
     }
-  
-    setEditMode(false);
-    setImageEditMode(false);
-    setModalVisible(true);
   };
+          
   
   const handleDeleteImage = (uri) => {
     deleteProcedureImage({
@@ -108,12 +113,15 @@ export default function ProcedureCard({ item, navigation, isPastDue: initialPast
           'Authorization': `Bearer ${SUPABASE_KEY}`,
           'Content-Type': 'application/json',
           'Prefer': 'return=minimal',
+
         },
         body: JSON.stringify({
           description,
           image_urls: imageUrls,
+          file_urls: fileUrls,
+          file_labels: fileLabels,
         }),
-      });
+              });
 
       setModalVisible(false);
     } catch (error) {
@@ -255,20 +263,38 @@ export default function ProcedureCard({ item, navigation, isPastDue: initialPast
 {/* Image Gallery Section */}
 {!keyboardVisible && (
   <View style={{ height: 200, marginTop: 10 }}>
-    <ScrollView ref={galleryScrollRef}>
-      {imageUrls.length > 0 ? (
-        <ImageGridViewer
+<ScrollView
+  ref={galleryScrollRef}
+  contentContainerStyle={{ justifyContent: 'center', alignItems: 'center' }}
+>
+      {(imageUrls.length > 0 || fileUrls.length > 0) ? (
+        <AttachmentGridViewer
           imageUrls={imageUrls}
-          imageEditMode={imageEditMode}
-          onDeleteImage={handleDeleteImage}
+          fileUrls={fileUrls}
+          fileLabels={fileLabels} // ✅ Pass this in to display labels
+          editMode={imageEditMode}
+          onDeleteAttachment={(uri) => {
+            if (uri.endsWith('.pdf')) {
+              deleteProcedureFile({
+                uriToDelete: uri,
+                fileUrls,
+                setFileUrls,
+                fileLabels,
+                setFileLabels,
+                procedureId: item.id,
+              });
+            } else {
+              handleDeleteImage(uri);
+            }
+          }}
           onSelectImage={(index) => {
             if (typeof window !== 'undefined') {
               window._setSelectedImageIndex(index);
             }
           }}
-                  />
+        />
       ) : (
-        <Text style={{ color: '#888', textAlign: 'center' }}>No Images</Text>
+        <Text style={{ color: '#888', textAlign: 'center' }}>No Attachments</Text>
       )}
     </ScrollView>
   </View>
@@ -300,45 +326,55 @@ export default function ProcedureCard({ item, navigation, isPastDue: initialPast
 
         <TouchableOpacity
   style={styles.fixedButton}
-  onPress={async () => {
+  onPress={() => setLabelPromptVisible(true)}
+>
+  <Text style={styles.buttonText}>Files</Text>
+</TouchableOpacity>
+
+<TouchableOpacity
+  style={[styles.fixedButton, styles.deleteButton]}
+  onPress={() => {
+    setImageEditMode(prev => {
+      const newMode = !prev;
+      if (newMode) scrollToGalleryEnd();
+      return newMode;
+    });
+  }}
+>
+  <Text style={styles.buttonText}>Delete</Text>
+</TouchableOpacity>
+
+<TouchableOpacity style={styles.fixedButton} onPress={saveDescription}>
+  <Text style={styles.buttonText}>Save</Text>
+</TouchableOpacity>
+</>
+)}
+</View>
+)}
+
+</View> 
+</KeyboardAvoidingView>
+</View>
+</Modal>
+
+<FullscreenImageViewerController imageUrls={imageUrls} />
+
+<FileLabelPrompt
+  visible={labelPromptVisible}
+  onSubmit={async (label) => {
+    setLabelPromptVisible(false);
     await uploadProcedureFile({
       procedureId: item.id,
       fileUrls,
       setFileUrls,
+      fileLabels,
+      setFileLabels,
       scrollToEnd: scrollToGalleryEnd,
+      label,
     });
   }}
-  >
-  <Text style={styles.buttonText}>Files</Text>
-</TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.fixedButton, styles.deleteButton]}
-          onPress={() => {
-            setImageEditMode(prev => {
-              const newMode = !prev;
-              if (newMode) scrollToGalleryEnd();
-              return newMode;
-            });
-          }}
-        >
-          <Text style={styles.buttonText}>Delete</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.fixedButton} onPress={saveDescription}>
-          <Text style={styles.buttonText}>Save</Text>
-        </TouchableOpacity>
-      </>
-    )}
-  </View>
-)}
-
-           </View> 
-          </KeyboardAvoidingView>
-        </View>
-      </Modal>
-
-      <FullscreenImageViewerController imageUrls={imageUrls} />
-      </View>
-  );
+  onCancel={() => setLabelPromptVisible(false)}
+/>
+</View>
+);
 }

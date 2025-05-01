@@ -335,7 +335,37 @@ export const styles = StyleSheet.create({
     padding: 8,
     zIndex: 10,
   },
+  pdfTouchable: {
+    width: 80,
+    height: 80,
+    borderRadius: 4,
+    backgroundColor: '#222',
+    marginRight: 8,
+    marginBottom: 8,
+    justifyContent: 'flex-start',   // Icon on top
+    alignItems: 'center',
+    paddingTop: 6,
+    paddingHorizontal: 2,
+  },
+  pdfLabelText: {
+    color: '#0f0',
+    fontSize: 10,
+    textAlign: 'center',
+    marginTop: 4,
+  },
+  pdfStrikeWrapper: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 2,
+  },
+  pdfStrikeLine: {
+    position: 'absolute',
+    width: '140%',
+    height: 4,
+    backgroundColor: '#ff0000',
+    transform: [{ rotate: '-45deg' }],
+  },
     
-  
-      
 });
