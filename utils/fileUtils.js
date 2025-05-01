@@ -3,8 +3,8 @@
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import { SUPABASE_URL, SUPABASE_BUCKET, SUPABASE_KEY } from './supaBaseConfig';
-import React, { useState } from 'react';
-import { Modal, View, Text, TextInput, TouchableOpacity, Image } from 'react-native';
+import React, { useState, useRef } from 'react';
+import { Modal, View, Text, TextInput, TouchableOpacity, Image, FlatList } from 'react-native';
 import { styles } from '../styles/globalStyles';
 import * as Linking from 'expo-linking';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -178,65 +178,103 @@ export async function deleteProcedureFile({
   }
       
 
-export function AttachmentGridViewer({
+  
+  export function AttachmentGridViewer({
     imageUrls,
     fileUrls,
     fileLabels,
     editMode,
     onDeleteAttachment,
     onSelectImage,
+    flatListRef,
   }) {
+    const combinedItems = [
+      ...imageUrls.map((uri, i) => ({ type: 'image', uri, index: i })),
+      ...fileUrls.map((uri, i) => ({ type: 'file', uri, index: i })),
+    ];
+  
     const renderStrike = () => (
-    <View style={{
-      position: 'absolute',
-      top: 0, left: 0, right: 0, bottom: 0,
-      justifyContent: 'center',
-      alignItems: 'center',
-      zIndex: 2
-    }}>
       <View style={{
         position: 'absolute',
-        width: '140%',
-        height: 4,
-        backgroundColor: '#ff0000',
-        transform: [{ rotate: '-45deg' }]
-      }} />
-    </View>
-  );
-
-  const renderImage = (uri, index) => (
-    <View key={`img-${index}`} style={{ position: 'relative' }}>
-      <TouchableOpacity onPress={() => editMode ? onDeleteAttachment(uri) : onSelectImage(index)}>
-        <Image source={{ uri }} style={styles.thumbnail} />
-        {editMode && renderStrike()}
-      </TouchableOpacity>
-    </View>
-  );
-
-  const renderFile = (uri, index) => (
-    <View key={`file-${index}`} style={{ position: 'relative' }}>
-      <TouchableOpacity
-        onPress={() => editMode ? onDeleteAttachment(uri) : Linking.openURL(uri)}
-        style={styles.pdfTouchable}
-      >
-        <MaterialCommunityIcons name="file-cog" color="#0f0" size={27} />
-        <Text style={styles.pdfLabelText} numberOfLines={3}>
-          {fileLabels?.[index] || 'Unlabeled'}
-        </Text>
-      </TouchableOpacity>
+        top: 0, left: 0, right: 0, bottom: 0,
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 2
+      }}>
+        <View style={{
+          position: 'absolute',
+          width: '140%',
+          height: 4,
+          backgroundColor: '#ff0000',
+          transform: [{ rotate: '-45deg' }]
+        }} />
+      </View>
+    );
   
-      {editMode && (
-        <View style={styles.pdfStrikeWrapper}>
-          <View style={styles.pdfStrikeLine} />
-        </View>
-      )}
-    </View>
-  );
-              
-  return (
-    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
-      {[...(imageUrls || [])].map(renderImage)}
-      {[...(fileUrls || [])].map(renderFile)}
-    </View>
-  );
-}
+    const renderItem = ({ item }) => {
+      if (item.type === 'image') {
+        return (
+          <View key={`img-${item.index}`} style={{ position: 'relative' }}>
+            <TouchableOpacity onPress={() => editMode ? onDeleteAttachment(item.uri) : onSelectImage(item.index)}>
+              <Image source={{ uri: item.uri }} style={styles.thumbnail} />
+              {editMode && renderStrike()}
+            </TouchableOpacity>
+          </View>
+        );
+      } else {
+        return (
+          <View key={`file-${item.index}`} style={{ position: 'relative' }}>
+            <TouchableOpacity
+              onPress={() => editMode ? onDeleteAttachment(item.uri) : Linking.openURL(item.uri)}
+              style={{
+                width: 80,
+                height: 80,
+                borderRadius: 4,
+                backgroundColor: '#222',
+                marginRight: 8,
+                marginBottom: 8,
+                justifyContent: 'flex-start',
+                alignItems: 'center',
+                paddingTop: 6,
+                paddingHorizontal: 2,
+              }}
+            >
+              <MaterialCommunityIcons name="file-cog" color="#0f0" size={27} />
+              <Text
+                style={{
+                  color: '#0f0',
+                  fontSize: 10,
+                  textAlign: 'center',
+                  marginTop: 4,
+                }}
+                numberOfLines={3}
+              >
+                {fileLabels?.[item.index] || 'Unlabeled'}
+              </Text>
+            </TouchableOpacity>
+            {editMode && renderStrike()}
+          </View>
+        );
+      }
+    };
+  
+    return (
+        <FlatList
+          ref={flatListRef}
+          data={combinedItems}
+          keyExtractor={(item) => `${item.type}-${item.index}`}
+          renderItem={renderItem}
+          numColumns={3}
+          columnWrapperStyle={{ justifyContent: 'flex-start', gap: 10 }}
+          contentContainerStyle={{ alignItems: 'center', paddingBottom: 10 }}
+          initialScrollIndex={Math.max(combinedItems.length - 1, 0)} // just in case
+          getItemLayout={(data, index) => ({
+            length: 88, // item height (80px + 8px margin)
+            offset: 88 * index,
+            index,
+          })}
+        />
+      );
+  }
+          
+  

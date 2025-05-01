@@ -1,7 +1,7 @@
 // components/ProcedureCard.js
 
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, Modal, Alert, Image, ScrollView, TextInput, KeyboardAvoidingView, Platform, StatusBar, Keyboard } from 'react-native';
+import { View, Text, TouchableOpacity, Modal, Alert, Image, ScrollView, TextInput, KeyboardAvoidingView, Platform, StatusBar, Keyboard, FlatList } from 'react-native';
 import { styles } from '../styles/globalStyles';
 import { FullscreenImageViewerController, deleteProcedureImage, uploadProcedureImage } from '../utils/imageUtils';
 import { SUPABASE_URL, SUPABASE_BUCKET, SUPABASE_KEY } from '../utils/supaBaseConfig';
@@ -22,6 +22,18 @@ export default function ProcedureCard({ item, navigation, isPastDue: initialPast
   const [fileLabels, setFileLabels] = useState(item.fileLabels || []);
   const [labelPromptVisible, setLabelPromptVisible] = useState(false);
   const [pendingUploadLabel, setPendingUploadLabel] = useState('');
+  const flatListRef = useRef(null);
+
+  useEffect(() => {
+    const totalItems = imageUrls.length + fileUrls.length;
+    if (flatListRef.current && totalItems > 0) {
+      flatListRef.current.scrollToIndex({
+        index: totalItems - 1,
+        animated: true,
+        viewPosition: 1, // aligns item to bottom
+      });
+    }
+  }, [imageUrls, fileUrls]);
 
   const now = new Date();
   const lastCompleted = item.last_completed ? new Date(item.last_completed) : null;
@@ -31,13 +43,22 @@ export default function ProcedureCard({ item, navigation, isPastDue: initialPast
   const daysRemaining = dueDate ? Math.floor((dueDate - now) / (1000 * 60 * 60 * 24)) : null;
 
   const scrollToGalleryEnd = () => {
+    const combinedItems = [
+      ...imageUrls.map((uri, i) => ({ type: 'image', uri, index: i })),
+      ...fileUrls.map((uri, i) => ({ type: 'file', uri, index: i })),
+    ];
+  
     InteractionManager.runAfterInteractions(() => {
       setTimeout(() => {
-        galleryScrollRef.current?.scrollToEnd({ animated: true });
+        flatListRef.current?.scrollToIndex({
+          index: combinedItems.length - 1,
+          animated: true,
+          viewPosition: 1,
+        });
       }, 300);
     });
   };
-
+      
   useEffect(() => {
     const showSubscription = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
     const hideSubscription = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
@@ -263,40 +284,38 @@ export default function ProcedureCard({ item, navigation, isPastDue: initialPast
 {/* Image Gallery Section */}
 {!keyboardVisible && (
   <View style={{ height: 200, marginTop: 10 }}>
-<ScrollView
-  ref={galleryScrollRef}
-  contentContainerStyle={{ justifyContent: 'center', alignItems: 'center' }}
->
-      {(imageUrls.length > 0 || fileUrls.length > 0) ? (
-        <AttachmentGridViewer
-          imageUrls={imageUrls}
-          fileUrls={fileUrls}
-          fileLabels={fileLabels} // ✅ Pass this in to display labels
-          editMode={imageEditMode}
-          onDeleteAttachment={(uri) => {
-            if (uri.endsWith('.pdf')) {
-              deleteProcedureFile({
-                uriToDelete: uri,
-                fileUrls,
-                setFileUrls,
-                fileLabels,
-                setFileLabels,
-                procedureId: item.id,
-              });
-            } else {
-              handleDeleteImage(uri);
-            }
-          }}
-          onSelectImage={(index) => {
-            if (typeof window !== 'undefined') {
-              window._setSelectedImageIndex(index);
-            }
-          }}
-        />
-      ) : (
-        <Text style={{ color: '#888', textAlign: 'center' }}>No Attachments</Text>
-      )}
-    </ScrollView>
+<View style={{ flex: 1 }}>
+  {(imageUrls.length > 0 || fileUrls.length > 0) ? (
+    <AttachmentGridViewer
+  imageUrls={imageUrls}
+  fileUrls={fileUrls}
+  fileLabels={fileLabels}
+  editMode={imageEditMode}
+  onDeleteAttachment={(uri) => {
+    if (uri.endsWith('.pdf')) {
+      deleteProcedureFile({
+        uriToDelete: uri,
+        fileUrls,
+        setFileUrls,
+        fileLabels,
+        setFileLabels,
+        procedureId: item.id,
+      });
+    } else {
+      handleDeleteImage(uri);
+    }
+  }}
+  onSelectImage={(index) => {
+    if (typeof window !== 'undefined') {
+      window._setSelectedImageIndex(index);
+    }
+  }}
+  flatListRef={flatListRef}
+/>
+  ) : (
+    <Text style={{ color: '#888', textAlign: 'center' }}>No Attachments</Text>
+  )}
+</View>
   </View>
 )}
 
