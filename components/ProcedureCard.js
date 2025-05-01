@@ -7,6 +7,7 @@ import { FullscreenImageViewerController, deleteProcedureImage, uploadProcedureI
 import { SUPABASE_URL, SUPABASE_BUCKET, SUPABASE_KEY } from '../utils/supaBaseConfig';
 import { InteractionManager } from 'react-native';
 import { uploadProcedureFile, deleteProcedureFile, AttachmentGridViewer, FileLabelPrompt } from '../utils/fileUtils';
+import * as Linking from 'expo-linking';
 
 export default function ProcedureCard({ item, navigation, isPastDue: initialPastDue, onComplete, onDelete }){
 
@@ -29,8 +30,27 @@ export default function ProcedureCard({ item, navigation, isPastDue: initialPast
   
   const dueDate = item.dueDate ? new Date(item.dueDate) : null;
   const daysRemaining = dueDate ? Math.floor((dueDate - now) / (1000 * 60 * 60 * 24)) : null;
+  
+  const renderLinkedDescription = (text) => {
+    const parts = text.split(/(\bhttps?:\/\/\S+\b)/g); // Match http/https URLs
+    return parts.map((part, index) => {
+      if (part.match(/^https?:\/\/\S+$/)) {
+        return (
+          <Text
+            key={index}
+            style={{ color: '#0af' }}
+            onPress={() => Linking.openURL(part)}
+          >
+            {part}
+          </Text>
+        );
+      } else {
+        return <Text key={index} style={styles.cardText}>{part}</Text>;
+      }
+    });
+  };
 
-  const scrollToGalleryEnd = () => {
+    const scrollToGalleryEnd = () => {
     InteractionManager.runAfterInteractions(() => {
       setTimeout(() => {
         galleryScrollRef.current?.scrollToEnd({ animated: true });
@@ -246,11 +266,11 @@ export default function ProcedureCard({ item, navigation, isPastDue: initialPast
               {/* Text Section */}
               <View style={{ flex: 1 }}>
                 <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-                  {!editMode ? (
-                    <Text style={styles.cardText}>
-                      {description || 'No description yet.'}
-                    </Text>
-                  ) : (
+{!editMode ? (
+  <Text style={styles.cardText}>
+    {renderLinkedDescription(description || 'No description yet.')}
+  </Text>
+) : (
                     <TextInput
                       style={[styles.input, { minHeight: 100, textAlignVertical: 'top' }]}
                       placeholder="Enter description..."
