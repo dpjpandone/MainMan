@@ -136,7 +136,6 @@ export default function ProcedureCard({ item, navigation, isPastDue: initialPast
           'Authorization': `Bearer ${SUPABASE_KEY}`,
           'Content-Type': 'application/json',
           'Prefer': 'return=minimal',
-
         },
         body: JSON.stringify({
           description,
@@ -144,14 +143,15 @@ export default function ProcedureCard({ item, navigation, isPastDue: initialPast
           file_urls: fileUrls,
           file_labels: fileLabels,
         }),
-              });
-
-      setModalVisible(false);
+      });
+  
+      setEditMode(false);       
+      setImageEditMode(false);
     } catch (error) {
       console.error('Failed to save description:', error);
     }
   };
-
+  
   const handleBack = () => {
     if (editMode) {
       setEditMode(false);
@@ -240,48 +240,53 @@ export default function ProcedureCard({ item, navigation, isPastDue: initialPast
 
   {editMode && (
   <TouchableOpacity
-  style={{
-    position: 'absolute',
-    top: 8,
-    right: 13,
-    zIndex: 10,
-    backgroundColor: '#000', // solid black
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#0f0', // neon green border
-  }}
-  onPress={handleBack}
->
-  <Text style={{ color: '#0f0', fontSize: 16, fontWeight: 'bold' }}>✕</Text>
-</TouchableOpacity>
-)}          
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={[styles.modalContainer, keyboardVisible ? { paddingBottom: 80 } : null]}
-          >
-            <View style={{ flex: 1 }}>
+    style={{
+      position: 'absolute',
+      top: 8,
+      right: 13,
+      zIndex: 10,
+      backgroundColor: '#000', // solid black
+      paddingHorizontal: 10,
+      paddingVertical: 3,
+      borderRadius: 6,
+      borderWidth: 1,
+      borderColor: '#0f0', // neon green border
+    }}
+    onPress={handleBack}
+  >
+    <Text style={{ color: '#0f0', fontSize: 16, fontWeight: 'bold' }}>✕</Text>
+  </TouchableOpacity>
+)}
 
-              {/* Text Section */}
-              <View style={{ flex: 1 }}>
-                <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-{!editMode ? (
-  <Text style={styles.cardText}>
-    {renderLinkedDescription(description || 'No description yet.')}
-  </Text>
-) : (
-                    <TextInput
-                      style={[styles.input, { minHeight: 100, textAlignVertical: 'top' }]}
-                      placeholder="Enter description..."
-                      placeholderTextColor="#777"
-                      multiline
-                      value={description}
-                      onChangeText={setDescription}
-                    />
-                  )}
-                </ScrollView>
-              </View>
+<KeyboardAvoidingView
+  behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+  style={[
+    styles.modalContainer,
+    keyboardVisible && { paddingBottom: 80, paddingTop: 20 }, // ✅ Added safe top padding
+  ]}
+>
+  <View style={{ flex: 1 }}>
+    {/* Text Section */}
+    <View style={{ flex: 1 }}>
+      <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
+        {!editMode ? (
+          <Text style={styles.cardText}>
+            {renderLinkedDescription(description || 'No description yet.')}
+          </Text>
+        ) : (
+          <View style={{ flex: 1 }}>
+            <TextInput
+              style={[styles.input, { flex: 1, textAlignVertical: 'top' }]}
+              placeholder="Enter description..."
+              placeholderTextColor="#777"
+              multiline
+              value={description}
+              onChangeText={setDescription}
+            />
+          </View>
+        )}
+      </ScrollView>
+    </View>
 
 {/* Image Gallery Section */}
 {!keyboardVisible && (
