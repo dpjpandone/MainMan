@@ -73,6 +73,9 @@ export default function ProcedureCard({ item, navigation, isPastDue: initialPast
       });
   
       const data = await response.json();
+      console.log('[MODAL] Fetching latest procedure:', item.id);
+      console.log('[MODAL] Supabase GET response:', data[0]);
+  
       if (data.length > 0) {
         const latest = data[0];
         setDescription(latest.description || '');
@@ -90,7 +93,7 @@ export default function ProcedureCard({ item, navigation, isPastDue: initialPast
       console.error('Error loading latest procedure:', error);
     }
   };
-          
+            
   
   const handleDeleteImage = (uri) => {
     deleteProcedureImage({

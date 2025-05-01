@@ -70,7 +70,8 @@ export function FileLabelPrompt({ visible, onSubmit, onCancel }) {
     if (!result.canceled && result.assets?.length > 0) {
       const file = result.assets[0];
       const uri = file.uri;
-      const fileName = `${procedureId}-${Date.now()}.pdf`;
+      const sanitizedLabel = label?.trim().replace(/[^a-z0-9_\-]/gi, '_') || 'Untitled';
+      const fileName = `${sanitizedLabel}-${procedureId}-${Date.now()}.pdf`;
       const uploadUrl = `${SUPABASE_URL}/storage/v1/object/${SUPABASE_BUCKET}/${fileName}`;
 
       console.log('Selected file:', uri);
@@ -129,7 +130,6 @@ const uploadResponse = await FileSystem.uploadAsync(uploadUrl, uri, {
   }
 }
   
-// Delete Document Helper
 export async function deleteProcedureFile({
     uriToDelete,
     fileUrls,
@@ -139,25 +139,28 @@ export async function deleteProcedureFile({
     procedureId,
     refreshMachine,
   }) {
-      try {
+    try {
       const fileName = uriToDelete.split('/').pop();
       const deleteUrl = `${SUPABASE_URL}/storage/v1/object/${SUPABASE_BUCKET}/${fileName}`;
-      console.log('Deleting file:', deleteUrl);
+      console.log('[DELETE] Initiating file deletion:', deleteUrl);
   
       const deleteResponse = await fetch(deleteUrl, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${SUPABASE_KEY}` },
       });
   
-      console.log('Delete response:', deleteResponse.status);
+      console.log('[DELETE] Storage response status:', deleteResponse.status);
   
       const updatedFiles = (fileUrls || []).filter((uri) => uri !== uriToDelete);
       const updatedLabels = (fileLabels || []).filter((_, i) => fileUrls[i] !== uriToDelete);
-        
+  
+      console.log('[PATCH] Updated fileUrls:', updatedFiles);
+      console.log('[PATCH] Updated fileLabels:', updatedLabels);
+  
       setFileUrls(updatedFiles);
       setFileLabels(updatedLabels);
   
-      await fetch(`${SUPABASE_URL}/rest/v1/procedures?id=eq.${procedureId}`, {
+      const patchResponse = await fetch(`${SUPABASE_URL}/rest/v1/procedures?id=eq.${procedureId}`, {
         method: 'PATCH',
         headers: {
           apikey: SUPABASE_KEY,
@@ -171,12 +174,16 @@ export async function deleteProcedureFile({
         }),
       });
   
+      console.log('[PATCH] Supabase response status:', patchResponse.status);
+      const resultText = await patchResponse.text();
+      console.log('[PATCH] Supabase response body:', resultText || '(empty)');
+  
       if (refreshMachine) refreshMachine();
     } catch (error) {
-      console.error('Failed to delete file:', error);
+      console.error('[ERROR] Failed to delete file:', error);
     }
   }
-      
+        
 
 export function AttachmentGridViewer({
     imageUrls,
