@@ -359,8 +359,9 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 2,
+    pointerEvents: 'none',
   },
-  pdfStrikeLine: {
+    pdfStrikeLine: {
     position: 'absolute',
     width: '140%',
     height: 4,
