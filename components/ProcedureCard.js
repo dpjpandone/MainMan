@@ -316,7 +316,19 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
 
       <View style={styles.buttonRow}>
   {typeof onComplete === 'function' && (
-    <TouchableOpacity style={styles.halfBtn} onPress={onComplete}>
+    <TouchableOpacity
+  style={styles.halfBtn}
+  onPress={() => {
+    Alert.alert(
+      'Confirm Completion',
+      'Are you sure you want to mark this procedure as complete?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Yes', onPress: onComplete },
+      ]
+    );
+  }}
+>
       <Text style={styles.completeText}>Mark Complete</Text>
     </TouchableOpacity>
   )}
