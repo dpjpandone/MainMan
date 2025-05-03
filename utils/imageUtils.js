@@ -6,25 +6,83 @@ import React, { useState } from 'react';
 import { SUPABASE_URL, SUPABASE_BUCKET, SUPABASE_KEY } from './supaBaseConfig';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+} from 'react-native-reanimated';
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
+
+
+
 export function FullscreenImageViewerController({ imageUrls }) {
   const [selectedImageIndex, setSelectedImageIndex] = useState(null);
-  const [scale, setScale] = useState(1);
-  const [rotation, setRotation] = useState(0);
-  const [panX, setPanX] = useState(0);
-  const [panY, setPanY] = useState(0);
+
+  const scale = useSharedValue(1);
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const currentScale = useSharedValue(1);
+  const startScale = useSharedValue(1);
+  const offsetX = useSharedValue(0);
+  const offsetY = useSharedValue(0);
+
+  const pinchGesture = Gesture.Pinch()
+    .onStart(() => {
+      startScale.value = currentScale.value;
+    })
+    .onUpdate((e) => {
+      scale.value = Math.max(startScale.value * e.scale, 1);
+    })
+    .onEnd(() => {
+      if (scale.value <= 1) {
+        scale.value = withTiming(1, { duration: 150 }, (finished) => {
+          if (finished) {
+            currentScale.value = 1;
+            offsetX.value = 0;
+            offsetY.value = 0;
+          }
+        });
+        translateX.value = withTiming(0, { duration: 150 });
+        translateY.value = withTiming(0, { duration: 150 });
+      } else {
+        currentScale.value = scale.value;
+        offsetX.value = translateX.value;
+        offsetY.value = translateY.value;
+      }
+    });
+
+  const panGesture = Gesture.Pan()
+    .onUpdate((e) => {
+      translateX.value = offsetX.value + e.translationX;
+      translateY.value = offsetY.value + e.translationY;
+    })
+    .onEnd(() => {
+      if (scale.value <= 1) {
+        scale.value = withTiming(1, { duration: 150 });
+        translateX.value = withTiming(0, { duration: 150 });
+        translateY.value = withTiming(0, { duration: 150 });
+        offsetX.value = 0;
+        offsetY.value = 0;
+      } else {
+        offsetX.value = translateX.value;
+        offsetY.value = translateY.value;
+      }
+    });
 
   const handleClose = () => {
     setSelectedImageIndex(null);
-    setScale(1);
-    setRotation(0);
-    setPanX(0);
-    setPanY(0);
+    scale.value = 1;
+    translateX.value = 0;
+    translateY.value = 0;
+    currentScale.value = 1;
+    offsetX.value = 0;
+    offsetY.value = 0;
   };
 
   if (typeof window !== 'undefined') {
     window._setSelectedImageIndex = setSelectedImageIndex;
   }
-  
+
   return (
     <>
       {selectedImageIndex !== null && (
@@ -32,50 +90,45 @@ export function FullscreenImageViewerController({ imageUrls }) {
           visible={true}
           uri={imageUrls[selectedImageIndex]}
           onClose={handleClose}
-          panX={panX}
-          panY={panY}
           scale={scale}
-          rotation={rotation}
-          setPanX={setPanX}
-          setPanY={setPanY}
-          setScale={setScale}
-          setRotation={setRotation}
+          translateX={translateX}
+          translateY={translateY}
+          pinchGesture={pinchGesture}
+          panGesture={panGesture}
         />
       )}
     </>
   );
-  }
+}
+
 export function FullscreenImageViewer({
   visible,
   uri,
   onClose,
-  panX,
-  panY,
   scale,
-  rotation,
-  setPanX,
-  setPanY,
-  setScale,
-  setRotation,
+  translateX,
+  translateY,
+  pinchGesture,
+  panGesture,
 }) {
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: translateX.value },
+      { translateY: translateY.value },
+      { scale: scale.value },
+    ],
+  }));
+
   return (
     <Modal visible={visible} transparent>
-      <View style={styles.fullscreenOverlay}>
-        <Image
-          source={{ uri }}
-          style={[
-            styles.fullscreenImage,
-            {
-              transform: [
-                { translateX: panX },
-                { translateY: panY },
-                { scale },
-                { rotate: `${rotation}deg` },
-              ],
-            },
-          ]}
-          resizeMode="contain"
-        />
+      <GestureHandlerRootView style={styles.fullscreenOverlay}>
+        <GestureDetector gesture={Gesture.Simultaneous(panGesture, pinchGesture)}>
+          <Animated.Image
+            source={{ uri }}
+            style={[styles.fullscreenImage, animatedStyle]}
+            resizeMode="contain"
+          />
+        </GestureDetector>
 
         <TouchableOpacity
           style={[styles.fsButton, { position: 'absolute', top: 0, right: 0, marginTop: 10, marginRight: 10 }]}
@@ -83,34 +136,7 @@ export function FullscreenImageViewer({
         >
           <Text style={styles.fsButtonText}>ⓧ</Text>
         </TouchableOpacity>
-
-        <View style={{ position: 'absolute', bottom: 100, right: 10 }}>
-          <TouchableOpacity style={styles.fsButton} onPress={() => setScale(s => Math.min(s + 0.25, 5))}>
-            <Text style={styles.fsButtonText}>⊕</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.fsButton, { marginTop: 8 }]} onPress={() => setScale(s => Math.max(s - 0.25, 0.5))}>
-            <Text style={styles.fsButtonText}>⊖</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.fsButton, { marginTop: 8 }]} onPress={() => setPanY(p => p - 50)}>
-            <Text style={styles.fsButtonText}>↑</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.fsButton, { marginTop: 8 }]} onPress={() => setPanY(p => p + 50)}>
-            <Text style={styles.fsButtonText}>↓</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={{ position: 'absolute', bottom: 20, right: 10, flexDirection: 'row', alignItems: 'center' }}>
-          <TouchableOpacity style={styles.fsButton} onPress={() => setPanX(p => p - 50)}>
-            <Text style={styles.fsButtonText}>←</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.fsButton, { marginLeft: 8 }]} onPress={() => setPanX(p => p + 50)}>
-            <Text style={styles.fsButtonText}>→</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.fsButton, { marginLeft: 8 }]} onPress={() => setRotation(r => r + 90)}>
-            <Text style={styles.fsButtonText}>↻</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+      </GestureHandlerRootView>
     </Modal>
   );
 }

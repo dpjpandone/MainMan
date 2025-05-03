@@ -1,6 +1,6 @@
 // App.js
 
-import 'react-native-reanimated'; // ✅ must be FIRST
+import 'react-native-reanimated'; 
 import React, { useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -20,7 +20,7 @@ import MachineScreen from './screens/MachineScreen';
 import ChecklistScreen from './screens/ChecklistScreen';
 import UploadTestScreen from './screens/UploadTestScreen';
 import GestureTestScreen from './screens/GestureTestScreen';
-
+import GestureSharedValueTest from './tests/GestureSharedValueTest';
 // Create Navigators
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -97,6 +97,8 @@ export default function App() {
   <Stack.Screen name="Login" component={LoginScreen} />
   <Stack.Screen name="MainTabs" component={TabNavigator} />
   <Stack.Screen name="GestureTestScreen" component={GestureTestScreen} />
+  <Stack.Screen name="GestureSharedValueTest" component={GestureSharedValueTest} />
+
 </Stack.Navigator>
           </NavigationContainer>
           <StatusBar style="light" backgroundColor="#000" />

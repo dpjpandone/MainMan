@@ -10,7 +10,7 @@ import RegisterCompanyModal from './RegisterCompanyModal';
 import AddUserModal from './AddUserModal';
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_KEY } from '../utils/supaBaseConfig';
-
+import GestureSharedValueTest from '../tests/GestureSharedValueTest';
 // Initialize Supabase client
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -191,6 +191,16 @@ export default function LoginScreen({ navigation }) {
 }}>
   <Text style={{ color: '#0f0', textAlign: 'center', marginTop: 10 }}>
     [DEV] Go To GestureTestScreen
+  </Text>
+</TouchableOpacity>
+<TouchableOpacity onPress={() => {
+  navigation.reset({
+    index: 0,
+    routes: [{ name: 'GestureSharedValueTest' }],
+  });
+}}>
+  <Text style={{ color: '#0f0', textAlign: 'center', marginTop: 10 }}>
+    [DEV] Go To GestureSharedValueTest
   </Text>
 </TouchableOpacity>
 
