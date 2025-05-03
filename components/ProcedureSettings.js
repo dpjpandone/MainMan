@@ -62,11 +62,16 @@ export default function ProcedureSettings({ visible, onClose, procedureId }) {
       return;
     }
     try {
-      const body = {
-        interval_days: parseInt(intervalDays),
-        last_completed: selectedDate ? new Date(selectedDate).toISOString() : null,
-      };
+        const session = await AsyncStorage.getItem('loginData');
+const parsedSession = JSON.parse(session);
+const userId = parsedSession?.userId;
 
+const body = {
+    interval_days: parseInt(intervalDays),
+    last_completed: selectedDate ? new Date(selectedDate).toISOString() : null,
+    completed_by: selectedDate ? userId : null,  // ⬅️ Only set if completed date is touched
+  };
+  
       await fetch(`${SUPABASE_URL}/rest/v1/procedures?id=eq.${procedureId}`, {
         method: 'PATCH',
         headers: {

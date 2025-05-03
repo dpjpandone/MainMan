@@ -25,6 +25,7 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
   const [fileLabels, setFileLabels] = useState(item.fileLabels || []);
   const [labelPromptVisible, setLabelPromptVisible] = useState(false);
   const [settingsModalVisible, setSettingsModalVisible] = useState(false);
+  const [initials, setInitials] = useState('');
 
   const now = new Date();
   const dueDate = item.dueDate ? new Date(item.dueDate) : null;
@@ -90,7 +91,30 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
   
     fetchFreshStatus();
   }, [item.id]);
-    
+
+  useEffect(() => {
+    const fetchInitials = async () => {
+      if (!item.completed_by) return;
+  
+      try {
+        const response = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${item.completed_by}`, {
+          headers: {
+            'apikey': SUPABASE_KEY,
+            'Authorization': `Bearer ${SUPABASE_KEY}`,
+          },
+        });
+        const data = await response.json();
+        if (data.length > 0 && data[0].initials) {
+          setInitials(data[0].initials);
+        }
+      } catch (error) {
+        console.error('[CARD] Error fetching initials:', error);
+      }
+    };
+  
+    fetchInitials();
+  }, [item.completed_by]);
+  
 
   useEffect(() => {
     const showSubscription = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
@@ -278,9 +302,17 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
       <Text style={[styles.procName, isPastDue && styles.pastDueText]}>
   {item.procedure_name || 'Unnamed Procedure'}
 </Text>
-      <Text style={[styles.procStatus, isPastDue && styles.pastDueText]}>
-        {isPastDue ? 'Past Due' : 'Up to Date'}
-      </Text>
+<Text style={[styles.procStatus, isPastDue && styles.pastDueText]}>
+  {isPastDue
+    ? `${Math.floor((Date.now() - lastCompleted) / 86400000)} days past due`
+    : lastCompleted
+    ? `Completed: ${lastCompleted.toLocaleDateString(undefined, {
+        year: '2-digit',
+        month: '2-digit',
+        day: '2-digit',
+      })}${initials ? ` (${initials})` : ''}`
+    : 'Completed'}
+</Text>
 
       <View style={styles.buttonRow}>
   {typeof onComplete === 'function' && (

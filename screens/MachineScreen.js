@@ -6,8 +6,9 @@ import { styles } from '../styles/globalStyles';
 import ProcedureCard from '../components/ProcedureCard';
 import { useRoute, useFocusEffect } from '@react-navigation/native';
 import { SUPABASE_URL, SUPABASE_KEY } from '../utils/supaBaseConfig';
-import AsyncStorage from '@react-native-async-storage/async-storage'; // 🔥 Add this line
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
+import { Calendar } from 'react-native-calendars';
 
 export default function MachineScreen() {
   const route = useRoute();
@@ -19,6 +20,8 @@ export default function MachineScreen() {
   const [name, setName] = useState('');
   const [interval, setInterval] = useState('');
   const [description, setDescription] = useState('');
+  const [startingDate, setStartingDate] = useState(new Date());
+  const [calendarVisible, setCalendarVisible] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -65,9 +68,15 @@ export default function MachineScreen() {
       const dueDate = new Date();
       dueDate.setDate(now.getDate() + parseInt(proc.interval_days || 0));
   
+      const session = await AsyncStorage.getItem('loginData');
+      const parsedSession = JSON.parse(session);
+      
+      console.log('[DEBUG] loginData:', parsedSession);
+        
       console.log('Marking complete for procedure ID:', proc.id);
       console.log('Setting last_completed:', now.toISOString());
       console.log('Setting due_date:', dueDate.toISOString());
+      console.log('Setting completed_by:', parsedSession?.userId);
   
       const response = await fetch(`${SUPABASE_URL}/rest/v1/procedures?id=eq.${proc.id}`, {
         method: 'PATCH',
@@ -80,6 +89,7 @@ export default function MachineScreen() {
         body: JSON.stringify({
           last_completed: now.toISOString(),
           due_date: dueDate.toISOString(),
+          completed_by: parsedSession?.userId, // ✅ NEW LINE
         }),
       });
   
@@ -90,7 +100,7 @@ export default function MachineScreen() {
       console.error('Failed to mark procedure complete:', error);
     }
   };
-  
+    
   const deleteProcedure = async (procId) => {
     try {
       await fetch(`${SUPABASE_URL}/rest/v1/procedures?id=eq.${procId}`, {
@@ -135,7 +145,7 @@ export default function MachineScreen() {
           procedure_name: name.trim(),
           description,
           interval_days: parseInt(interval),
-          last_completed: null,
+          last_completed: startingDate.toISOString(),
           due_date: null,
           image_urls: [],
           company_id: companyId,
@@ -194,6 +204,14 @@ export default function MachineScreen() {
               onChangeText={setName}
               style={styles.input}
             />
+                        <TextInput
+              placeholder="Description"
+              placeholderTextColor="#777"
+              value={description}
+              onChangeText={setDescription}
+              style={styles.input}
+            />
+
             <TextInput
               placeholder="Interval (days)"
               placeholderTextColor="#777"
@@ -202,13 +220,15 @@ export default function MachineScreen() {
               onChangeText={setInterval}
               style={styles.input}
             />
-            <TextInput
-              placeholder="Description"
-              placeholderTextColor="#777"
-              value={description}
-              onChangeText={setDescription}
-              style={styles.input}
-            />
+            <Text style={{ color: '#0f0', marginBottom: 5 }}>Starting Date:</Text>
+<TouchableOpacity
+  onPress={() => setCalendarVisible(true)}
+  style={[styles.input, { justifyContent: 'center' }]}
+>
+  <Text style={{ color: '#fff' }}>{startingDate.toDateString()}</Text>
+</TouchableOpacity>
+
+
 
             <TouchableOpacity style={styles.button} onPress={addProcedure}>
               <Text style={styles.buttonText}>Save</Text>
@@ -220,6 +240,43 @@ export default function MachineScreen() {
           </View>
         </View>
       </Modal>
+      <Modal
+  visible={calendarVisible}
+  transparent={true}
+  animationType="slide"
+>
+  <View style={styles.modalOverlay}>
+    <View style={styles.modalContainer}>
+      <Text style={styles.modalTitle}>Select Starting Date</Text>
+
+      <Calendar
+        onDayPress={(day) => {
+          const selected = new Date(day.dateString);
+          setStartingDate(selected);
+          setCalendarVisible(false);
+        }}
+        markedDates={{
+          [startingDate.toISOString().split('T')[0]]: {
+            selected: true,
+            selectedColor: '#0f0'
+          }
+        }}
+        theme={{
+          calendarBackground: '#111',
+          dayTextColor: '#fff',
+          monthTextColor: '#0f0',
+          arrowColor: '#0f0',
+          selectedDayTextColor: '#000',
+          todayTextColor: '#0f0',
+        }}
+      />
+
+      <TouchableOpacity onPress={() => setCalendarVisible(false)}>
+        <Text style={styles.cancelText}>Cancel</Text>
+      </TouchableOpacity>
+    </View>
+  </View>
+</Modal>
     </View>
   );
 }

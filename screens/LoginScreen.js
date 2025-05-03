@@ -148,11 +148,13 @@ export default function LoginScreen({ navigation }) {
         </Text>
       </TouchableOpacity>
 
-      <TouchableOpacity onPress={() => setShowAddUserModal(true)}>
-        <Text style={{ color: '#0f0', textAlign: 'center', marginTop: 20 }}>
-          Add New User
-        </Text>
-      </TouchableOpacity>
+      {loginData?.role === 'admin' && (
+  <TouchableOpacity onPress={() => setShowAddUserModal(true)}>
+    <Text style={{ color: '#0f0', textAlign: 'center', marginTop: 20 }}>
+      Add New User
+    </Text>
+  </TouchableOpacity>
+)}
 
       {/* 🔥 Modals */}
       {showRegisterCompanyModal && (

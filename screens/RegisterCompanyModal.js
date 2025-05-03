@@ -5,17 +5,22 @@ import { styles } from '../styles/globalStyles';
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_KEY } from '../utils/supaBaseConfig';
 
-// Initialize Supabase client
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 export default function RegisterCompanyModal({ visible, onClose }) {
   const [companyName, setCompanyName] = useState('');
   const [adminEmail, setAdminEmail] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
+  const [adminInitials, setAdminInitials] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleRegister = async () => {
-    if (!companyName.trim() || !adminEmail.trim() || !adminPassword.trim()) {
+    if (
+      !companyName.trim() ||
+      !adminEmail.trim() ||
+      !adminPassword.trim() ||
+      !adminInitials.trim()
+    ) {
       Alert.alert('Missing Fields', 'Please fill out all fields.');
       return;
     }
@@ -23,12 +28,11 @@ export default function RegisterCompanyModal({ visible, onClose }) {
     setLoading(true);
 
     try {
-      // Step 1: Insert company into companies table
       const { data: companyData, error: companyError } = await supabase
         .from('companies')
         .insert([{ company_name: companyName.trim() }])
         .select()
-        .single(); // get inserted row back
+        .single();
 
       if (companyError) {
         console.error('Company creation error:', companyError);
@@ -39,7 +43,6 @@ export default function RegisterCompanyModal({ visible, onClose }) {
 
       const companyId = companyData.id;
 
-      // Step 2: Create Admin User in Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: adminEmail.trim(),
         password: adminPassword,
@@ -51,23 +54,34 @@ export default function RegisterCompanyModal({ visible, onClose }) {
         },
       });
 
-      if (authError) {
+      if (authError || !authData.user) {
         console.error('Auth signup error:', authError);
         Alert.alert('Error', 'Failed to create admin account.');
         setLoading(false);
         return;
       }
 
+      const userId = authData.user.id;
+
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .insert([{ id: userId, initials: adminInitials.trim().toUpperCase() }]);
+
+      if (profileError) {
+        console.error('Profile insertion error:', profileError);
+        Alert.alert('Error', 'Failed to save admin initials.');
+        setLoading(false);
+        return;
+      }
+
       Alert.alert('Success', 'Company registered and Admin account created.');
-      
-      // Clear fields
+
       setCompanyName('');
       setAdminEmail('');
       setAdminPassword('');
+      setAdminInitials('');
 
-      // Close the modal (navigation happens outside if needed)
       onClose();
-
     } catch (error) {
       console.error('Unexpected error:', error);
       Alert.alert('Error', 'An unexpected error occurred.');
@@ -105,6 +119,15 @@ export default function RegisterCompanyModal({ visible, onClose }) {
             value={adminPassword}
             onChangeText={setAdminPassword}
             secureTextEntry
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Admin Initials"
+            placeholderTextColor="#888"
+            value={adminInitials}
+            onChangeText={setAdminInitials}
+            autoCapitalize="characters"
+            maxLength={5}
           />
 
           <View style={styles.buttonRow}>
