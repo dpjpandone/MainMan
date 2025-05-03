@@ -298,15 +298,15 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
       <View style={styles.modalOverlay}>
   <StatusBar backgroundColor="#000" barStyle="light-content" />
 
-  {editMode && (
+  {editMode && !keyboardVisible && (
   <>
     <TouchableOpacity style={styles.modalCloseBtn} onPress={handleBack}>
       <Text style={styles.modalCloseBtnText}>✕</Text>
     </TouchableOpacity>
 
     <TouchableOpacity style={styles.modalGearIcon} onPress={() => setSettingsModalVisible(true)}>
-  <MaterialCommunityIcons name="cog-outline" size={30} color="#0f0" />
-</TouchableOpacity>
+      <MaterialCommunityIcons name="cog-outline" size={30} color="#0f0" />
+    </TouchableOpacity>
   </>
 )}
 

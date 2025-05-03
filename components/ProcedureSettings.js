@@ -1,5 +1,3 @@
-// components/ProcedureSettings.js
-
 import React, { useEffect, useState } from 'react';
 import { View, Text, Modal, TouchableOpacity, ActivityIndicator, TextInput, Alert } from 'react-native';
 import { Calendar } from 'react-native-calendars';
@@ -89,56 +87,56 @@ export default function ProcedureSettings({ visible, onClose, procedureId }) {
   };
 
   return (
-    <Modal visible={visible} transparent={true} animationType="slide">
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContainer}>
-          <Text style={[styles.cardText, { marginBottom: 10 }]}>
-            Procedure ID: {procedureId || '(none)'}
-          </Text>
-          <Text style={styles.cardText}>Company ID: {companyId || '(none)'}</Text>
+<Modal visible={visible} transparent={false} animationType="slide">
+  <View style={{ flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' }}>
+    <View style={styles.modalContainer}>
 
-          {loading ? (
-            <ActivityIndicator color="#0f0" style={{ marginTop: 20 }} />
-          ) : (
-            <>
-              <Text style={[styles.cardText, { marginTop: 20 }]}>Interval Days:</Text>
-              <TextInput
-                style={styles.input}
-                value={intervalDays}
-                onChangeText={setIntervalDays}
-                keyboardType="numeric"
-                placeholder="Enter interval in days"
-                placeholderTextColor="#777"
-              />
+    <View style={{ alignItems: 'center', marginTop: 10, marginBottom: 20 }}>
+  <Text style={{ color: '#0f0', fontSize: 22, fontWeight: 'bold' }}>Procedure Settings</Text>
+</View>
 
-              <Text style={[styles.cardText, { marginTop: 20 }]}>Last Completed:</Text>
-              <Calendar
-                onDayPress={day => setSelectedDate(day.dateString)}
-                markedDates={
-                  selectedDate ? { [selectedDate]: { selected: true, marked: true } } : {}
-                }
-                theme={{
-                  calendarBackground: '#000',
-                  dayTextColor: '#0f0',
-                  monthTextColor: '#0f0',
-                  selectedDayBackgroundColor: '#0f0',
-                  selectedDayTextColor: '#000',
-                }}
-              />
+      {loading ? (
+        <ActivityIndicator color="#0f0" style={{ marginTop: 20 }} />
+      ) : (
+        <>
+          <Text style={[styles.cardText, { marginTop: 20 }]}>Interval Days:</Text>
+          <TextInput
+            style={styles.input}
+            value={intervalDays}
+            onChangeText={setIntervalDays}
+            keyboardType="numeric"
+            placeholder="Enter interval in days"
+            placeholderTextColor="#777"
+          />
 
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 20 }}>
-                <TouchableOpacity style={styles.fixedButton} onPress={onClose}>
-                  <Text style={styles.buttonText}>Cancel</Text>
-                </TouchableOpacity>
+          <Text style={[styles.cardText, { marginTop: 20 }]}>Last Completed:</Text>
+          <Calendar
+            onDayPress={day => setSelectedDate(day.dateString)}
+            markedDates={
+              selectedDate ? { [selectedDate]: { selected: true, marked: true } } : {}
+            }
+            theme={{
+              calendarBackground: '#000',
+              dayTextColor: '#0f0',
+              monthTextColor: '#0f0',
+              selectedDayBackgroundColor: '#0f0',
+              selectedDayTextColor: '#000',
+            }}
+          />
 
-                <TouchableOpacity style={styles.fixedButton} onPress={handleSave}>
-                  <Text style={styles.buttonText}>Save</Text>
-                </TouchableOpacity>
-              </View>
-            </>
-          )}
-        </View>
-      </View>
-    </Modal>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 20 }}>
+            <TouchableOpacity style={styles.fixedButton} onPress={onClose}>
+              <Text style={styles.buttonText}>Cancel</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.fixedButton} onPress={handleSave}>
+              <Text style={styles.buttonText}>Save</Text>
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
+    </View>
+  </View>
+</Modal>
   );
 }

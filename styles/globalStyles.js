@@ -235,7 +235,7 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalContainer: {
-    backgroundColor: '#111',
+    backgroundColor: '#000',
     paddingHorizontal: 15,
     paddingTop: 10,
     paddingBottom: 0,
