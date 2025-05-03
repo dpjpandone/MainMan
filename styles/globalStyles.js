@@ -379,4 +379,23 @@ export const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 22,
   },
-  });
+  modalCloseBtn: {
+    position: 'absolute',
+    top: 8,
+    right: 13,
+    zIndex: 10,
+    backgroundColor: '#000',
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#0f0',
+  },
+  
+  modalCloseBtnText: {
+    color: '#0f0',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+    
+});

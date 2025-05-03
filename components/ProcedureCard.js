@@ -152,17 +152,34 @@ export default function ProcedureCard({ item, navigation, isPastDue: initialPast
     }
   };
   
-  const handleBack = () => {
+  const handleBack = async () => {
     if (editMode) {
-      setEditMode(false);
-      setImageEditMode(false);
-      setDescription(item.description || '');
-      setImageUrls(item.imageUrls || []);
+      try {
+        const response = await fetch(`${SUPABASE_URL}/rest/v1/procedures?id=eq.${item.id}`, {
+          method: 'GET',
+          headers: {
+            'apikey': SUPABASE_KEY,
+            'Authorization': `Bearer ${SUPABASE_KEY}`,
+          },
+        });
+  
+        const data = await response.json();
+        const latest = data[0];
+  
+        setEditMode(false);
+        setImageEditMode(false);
+        setDescription(latest.description || '');
+        setImageUrls(latest.image_urls || []);
+        setFileUrls(latest.file_urls || []);
+        setFileLabels(latest.file_labels || []);
+      } catch (error) {
+        console.error('Error restoring state on back:', error);
+      }
     } else {
       setModalVisible(false);
     }
   };
-
+        
   const handleImagePick = async () => {
     await uploadProcedureImage({
       procedureId: item.id,
@@ -239,53 +256,38 @@ export default function ProcedureCard({ item, navigation, isPastDue: initialPast
   <StatusBar backgroundColor="#000" barStyle="light-content" />
 
   {editMode && (
-  <TouchableOpacity
-    style={{
-      position: 'absolute',
-      top: 8,
-      right: 13,
-      zIndex: 10,
-      backgroundColor: '#000', // solid black
-      paddingHorizontal: 10,
-      paddingVertical: 3,
-      borderRadius: 6,
-      borderWidth: 1,
-      borderColor: '#0f0', // neon green border
-    }}
-    onPress={handleBack}
-  >
-    <Text style={{ color: '#0f0', fontSize: 16, fontWeight: 'bold' }}>✕</Text>
-  </TouchableOpacity>
+    <TouchableOpacity style={styles.modalCloseBtn} onPress={handleBack}>
+  <Text style={styles.modalCloseBtnText}>✕</Text>
+</TouchableOpacity>
 )}
 
-<KeyboardAvoidingView
-  behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-  style={[
-    styles.modalContainer,
-    keyboardVisible && { paddingBottom: 80, paddingTop: 20 }, // ✅ Added safe top padding
-  ]}
->
+<View style={styles.modalContainer}>
   <View style={{ flex: 1 }}>
     {/* Text Section */}
     <View style={{ flex: 1 }}>
-      <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-        {!editMode ? (
-          <Text style={styles.cardText}>
-            {renderLinkedDescription(description || 'No description yet.')}
-          </Text>
-        ) : (
-          <View style={{ flex: 1 }}>
-            <TextInput
-              style={[styles.input, { flex: 1, textAlignVertical: 'top' }]}
-              placeholder="Enter description..."
-              placeholderTextColor="#777"
-              multiline
-              value={description}
-              onChangeText={setDescription}
-            />
-          </View>
-        )}
-      </ScrollView>
+  {!editMode ? (
+    <Text style={styles.cardText}>
+      {renderLinkedDescription(description || 'No description yet.')}
+    </Text>
+  ) : (
+    <TextInput
+      style={[
+        styles.input,
+        {
+          textAlignVertical: 'top',
+          padding: 10,
+          height: 220, // fixed height for predictability
+        }
+      ]}
+      placeholder="Enter description..."
+      placeholderTextColor="#777"
+      multiline
+      scrollEnabled
+      value={description}
+      onChangeText={setDescription}
+    />
+  )}
+</View>
     </View>
 
 {/* Image Gallery Section */}
@@ -381,7 +383,6 @@ export default function ProcedureCard({ item, navigation, isPastDue: initialPast
 )}
 
 </View> 
-</KeyboardAvoidingView>
 </View>
 </Modal>
 
