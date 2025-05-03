@@ -1,6 +1,6 @@
 export default {
   expo: {
-    name: "evatech-reboot",
+    name: "MainMan",
     slug: "evatech-reboot",
     version: "1.0.0",
     orientation: "portrait",
@@ -13,7 +13,7 @@ export default {
     splash: {
       image: "./assets/splash-icon.png",
       resizeMode: "contain",
-      backgroundColor: "#ffffff"
+      backgroundColor: "#000000"
     },
     ios: {
       supportsTablet: true
@@ -21,7 +21,7 @@ export default {
     android: {
       adaptiveIcon: {
         foregroundImage: "./assets/adaptive-icon.png",
-        backgroundColor: "#ffffff"
+        backgroundColor: "#000000"
       },
       package: "com.evatech.maintenance"
     },
