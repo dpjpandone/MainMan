@@ -1,7 +1,7 @@
 // components/ProcedureCard.js
 
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, Modal, Alert, Image, ScrollView, TextInput, KeyboardAvoidingView, Platform, StatusBar, Keyboard } from 'react-native';
+import { View, Text, TouchableOpacity, Modal, Alert, ScrollView, TextInput, StatusBar, Keyboard } from 'react-native';
 import { styles } from '../styles/globalStyles';
 import { FullscreenImageViewerController, deleteProcedureImage, uploadProcedureImage } from '../utils/imageUtils';
 import { SUPABASE_URL, SUPABASE_BUCKET, SUPABASE_KEY } from '../utils/supaBaseConfig';
@@ -11,7 +11,7 @@ import * as Linking from 'expo-linking';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import ProcedureSettings from './ProcedureSettings';
 
-export default function ProcedureCard({ item, navigation, isPastDue: initialPastDue, onComplete, onDelete }){
+export default function ProcedureCard({ item, onComplete, onDelete, refreshMachine }) {
 
   const [bgColor, setBgColor] = useState('#e4001e');
   const [modalVisible, setModalVisible] = useState(false);
@@ -24,16 +24,15 @@ export default function ProcedureCard({ item, navigation, isPastDue: initialPast
   const [fileUrls, setFileUrls] = useState(item.fileUrls || []);
   const [fileLabels, setFileLabels] = useState(item.fileLabels || []);
   const [labelPromptVisible, setLabelPromptVisible] = useState(false);
-  const [pendingUploadLabel, setPendingUploadLabel] = useState('');
   const [settingsModalVisible, setSettingsModalVisible] = useState(false);
 
   const now = new Date();
-  const lastCompleted = item.last_completed ? new Date(item.last_completed) : null;
-  const isPastDue = !lastCompleted || (Math.floor((now - lastCompleted) / (1000 * 60 * 60 * 24)) > item.intervalDays);
-  
   const dueDate = item.dueDate ? new Date(item.dueDate) : null;
-  const daysRemaining = dueDate ? Math.floor((dueDate - now) / (1000 * 60 * 60 * 24)) : null;
-  
+
+  const lastCompleted = item.last_completed ? new Date(item.last_completed) : null;
+  const intervalDays = item.interval_days || 0;
+  const isPastDue = !lastCompleted || (Math.floor((Date.now() - lastCompleted) / 86400000) > intervalDays);
+
   const renderLinkedDescription = (text) => {
     const parts = text.split(/(\bhttps?:\/\/\S+\b)/g); // Match http/https URLs
     return parts.map((part, index) => {
@@ -60,6 +59,38 @@ export default function ProcedureCard({ item, navigation, isPastDue: initialPast
       }, 300);
     });
   };
+  
+    
+  useEffect(() => {
+    const fetchFreshStatus = async () => {
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/procedures?id=eq.${item.id}`, {
+          method: 'GET',
+          headers: {
+            apikey: SUPABASE_KEY,
+            Authorization: `Bearer ${SUPABASE_KEY}`,
+            Accept: 'application/json',
+          },
+        });
+  
+        const data = await res.json();
+        if (data.length > 0) {
+          const proc = data[0];
+          const newLastCompleted = proc.last_completed ? new Date(proc.last_completed) : null;
+          const newInterval = proc.interval_days || 0;
+  
+          const overdue = !newLastCompleted || (Math.floor((Date.now() - newLastCompleted) / 86400000) > newInterval);
+  
+          setBgColor(overdue ? '#e4001e' : '#003300'); // flash or green
+        }
+      } catch (err) {
+        console.error('[CARD] Failed to fetch updated status:', err);
+      }
+    };
+  
+    fetchFreshStatus();
+  }, [item.id]);
+    
 
   useEffect(() => {
     const showSubscription = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
@@ -72,17 +103,24 @@ export default function ProcedureCard({ item, navigation, isPastDue: initialPast
 
   useEffect(() => {
     let intervalId;
-    if (isPastDue) {
+    if (!item) return;
+  
+    const lastCompleted = item.last_completed ? new Date(item.last_completed) : null;
+    const intervalDays = item.interval_days || 0;
+    const overdue = !lastCompleted || (Math.floor((Date.now() - lastCompleted) / 86400000) > intervalDays);
+  
+    if (overdue) {
       intervalId = setInterval(() =>
         setBgColor(prev => (prev === '#e4001e' ? '#ffff00' : '#e4001e')),
         500
       );
     } else {
-      setBgColor('#003300'); // green for up to date
+      setBgColor('#003300'); // green
     }
+  
     return () => clearInterval(intervalId);
-  }, [isPastDue]);
-      
+  }, [item]);
+        
   //section 2 Functions  
   
   const openModal = async () => {
@@ -180,9 +218,11 @@ export default function ProcedureCard({ item, navigation, isPastDue: initialPast
       }
     } else {
       setModalVisible(false);
+      if (typeof refreshMachine === 'function') {
+        refreshMachine(); 
+      }
     }
-  };
-        
+  };          
   const handleImagePick = async () => {
     await uploadProcedureImage({
       procedureId: item.id,
@@ -394,50 +434,27 @@ export default function ProcedureCard({ item, navigation, isPastDue: initialPast
 </View> 
 </View>
 </Modal>
-
-<FullscreenImageViewerController imageUrls={imageUrls} />
-<ProcedureSettings
-  visible={settingsModalVisible}
-  onClose={() => setSettingsModalVisible(false)}
-  currentInterval={item.intervalDays}
-  lastCompleted={item.last_completed}
-  onSave={async (newInterval, newDate) => {
-    try {
-      await fetch(`${SUPABASE_URL}/rest/v1/procedures?id=eq.${item.id}`, {
-        method: 'PATCH',
-        headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_KEY}`,
-          'Content-Type': 'application/json',
-          Prefer: 'return=minimal',
-        },
-        body: JSON.stringify({
-          interval_days: newInterval,
-          last_completed: newDate,
-        }),
-      });
-      console.log('Interval settings updated.');
-      setSettingsModalVisible(false);
-    } catch (err) {
-      console.error('Failed to update interval:', err);
-    }
-  }}
-/>
 <FileLabelPrompt
   visible={labelPromptVisible}
-  onSubmit={async (label) => {
+  onSubmit={(label) => {
     setLabelPromptVisible(false);
-    await uploadProcedureFile({
+    uploadProcedureFile({
       procedureId: item.id,
       fileUrls,
       setFileUrls,
+      scrollToEnd: scrollToGalleryEnd,
       fileLabels,
       setFileLabels,
-      scrollToEnd: scrollToGalleryEnd,
       label,
     });
   }}
   onCancel={() => setLabelPromptVisible(false)}
+/>
+<FullscreenImageViewerController imageUrls={imageUrls} />
+<ProcedureSettings
+  visible={settingsModalVisible}
+  onClose={() => setSettingsModalVisible(false)}
+  procedureId={item.id}
 />
 </View>
 );

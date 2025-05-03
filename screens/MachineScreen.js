@@ -23,9 +23,9 @@ export default function MachineScreen() {
   useFocusEffect(
     useCallback(() => {
       loadMachineAndProcedures();
-    }, [])
+    }, [machineId])
   );
-    
+      
   const loadMachineAndProcedures = async () => {
     try {
       // Fetch machine name
@@ -154,13 +154,14 @@ export default function MachineScreen() {
   };
   
   const renderProcedure = ({ item }) => (
-<ProcedureCard
-  item={{ ...item, machineId }}
-  onComplete={() => markComplete(item)}
-  onDelete={deleteProcedure}
-/>
+    <ProcedureCard
+      item={{ ...item, machineId }}
+      onComplete={() => markComplete(item)}
+      onDelete={deleteProcedure}
+      refreshMachine={loadMachineAndProcedures} // ✅ add this line
+    />
   );
-
+    
   return (
     <View style={styles.container}>
       <StatusBar backgroundColor="#000" style="light" />
