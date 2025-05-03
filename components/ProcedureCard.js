@@ -8,6 +8,8 @@ import { SUPABASE_URL, SUPABASE_BUCKET, SUPABASE_KEY } from '../utils/supaBaseCo
 import { InteractionManager } from 'react-native';
 import { uploadProcedureFile, deleteProcedureFile, AttachmentGridViewer, FileLabelPrompt } from '../utils/fileUtils';
 import * as Linking from 'expo-linking';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import ProcedureSettings from './ProcedureSettings';
 
 export default function ProcedureCard({ item, navigation, isPastDue: initialPastDue, onComplete, onDelete }){
 
@@ -23,6 +25,7 @@ export default function ProcedureCard({ item, navigation, isPastDue: initialPast
   const [fileLabels, setFileLabels] = useState(item.fileLabels || []);
   const [labelPromptVisible, setLabelPromptVisible] = useState(false);
   const [pendingUploadLabel, setPendingUploadLabel] = useState('');
+  const [settingsModalVisible, setSettingsModalVisible] = useState(false);
 
   const now = new Date();
   const lastCompleted = item.last_completed ? new Date(item.last_completed) : null;
@@ -256,9 +259,15 @@ export default function ProcedureCard({ item, navigation, isPastDue: initialPast
   <StatusBar backgroundColor="#000" barStyle="light-content" />
 
   {editMode && (
+  <>
     <TouchableOpacity style={styles.modalCloseBtn} onPress={handleBack}>
-  <Text style={styles.modalCloseBtnText}>✕</Text>
+      <Text style={styles.modalCloseBtnText}>✕</Text>
+    </TouchableOpacity>
+
+    <TouchableOpacity style={styles.modalGearIcon} onPress={() => setSettingsModalVisible(true)}>
+  <MaterialCommunityIcons name="cog-outline" size={30} color="#0f0" />
 </TouchableOpacity>
+  </>
 )}
 
 <View style={styles.modalContainer}>
@@ -387,7 +396,33 @@ export default function ProcedureCard({ item, navigation, isPastDue: initialPast
 </Modal>
 
 <FullscreenImageViewerController imageUrls={imageUrls} />
-
+<ProcedureSettings
+  visible={settingsModalVisible}
+  onClose={() => setSettingsModalVisible(false)}
+  currentInterval={item.intervalDays}
+  lastCompleted={item.last_completed}
+  onSave={async (newInterval, newDate) => {
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/procedures?id=eq.${item.id}`, {
+        method: 'PATCH',
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+          'Content-Type': 'application/json',
+          Prefer: 'return=minimal',
+        },
+        body: JSON.stringify({
+          interval_days: newInterval,
+          last_completed: newDate,
+        }),
+      });
+      console.log('Interval settings updated.');
+      setSettingsModalVisible(false);
+    } catch (err) {
+      console.error('Failed to update interval:', err);
+    }
+  }}
+/>
 <FileLabelPrompt
   visible={labelPromptVisible}
   onSubmit={async (label) => {

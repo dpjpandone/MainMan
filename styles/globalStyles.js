@@ -331,7 +331,7 @@ export const styles = StyleSheet.create({
   settingsIcon: {
     position: 'absolute',
     top: 15,
-    right: 10,
+    left: 10,
     padding: 8,
     zIndex: 10,
   },
@@ -397,5 +397,14 @@ export const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
-    
-});
+  modalGearIcon: {
+    position: 'absolute',
+    top: 8,           
+    left: 13,         
+    zIndex: 10,
+    backgroundColor: '#000',
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+
+  }
+  });
