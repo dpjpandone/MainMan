@@ -1,18 +1,12 @@
 //imageUtils.js
-import { View, Image, TouchableOpacity, Text } from 'react-native';
-import { styles } from '../styles/globalStyles';
-import { Modal } from 'react-native';
 import React, { useState } from 'react';
+import { Modal, TouchableOpacity, Text } from 'react-native';
+import { styles } from '../styles/globalStyles';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SUPABASE_URL, SUPABASE_BUCKET, SUPABASE_KEY } from './supaBaseConfig';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-} from 'react-native-reanimated';
-import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
-
 
 
 export function FullscreenImageViewerController({ imageUrls }) {
@@ -141,43 +135,6 @@ export function FullscreenImageViewer({
   );
 }
 
-export function ImageGridViewer({ imageUrls, imageEditMode, onDeleteImage, onSelectImage }) {
-  return (
-    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
-      {imageUrls.map((uri, index) => (
-        <View key={index} style={{ position: 'relative' }}>
-          {imageEditMode ? (
-            <TouchableOpacity onPress={() => onDeleteImage(uri)}>
-              <Image source={{ uri }} style={styles.thumbnail} />
-              <View style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                justifyContent: 'center',
-                alignItems: 'center',
-                zIndex: 2
-              }}>
-                <View style={{
-                  position: 'absolute',
-                  width: '140%',
-                  height: 4,
-                  backgroundColor: '#ff0000',
-                  transform: [{ rotate: '-45deg' }]
-                }} />
-              </View>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity onPress={() => onSelectImage(index)}>
-              <Image source={{ uri }} style={styles.thumbnail} />
-            </TouchableOpacity>
-          )}
-        </View>
-      ))}
-    </View>
-  );
-}
 // Delete Image Helper
 export async function deleteProcedureImage({ uriToDelete, imageUrls, procedureId, setImageUrls, refreshMachine }) {
   try {
