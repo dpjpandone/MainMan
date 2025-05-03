@@ -93,10 +93,11 @@ export default function App() {
       <SafeAreaProvider>
         <GestureHandlerRootView style={{ flex: 1 }}>
           <NavigationContainer>
-            <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Login">
-              <Stack.Screen name="Login" component={LoginScreen} />
-              <Stack.Screen name="MainTabs" component={TabNavigator} />
-            </Stack.Navigator>
+          <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Login">
+  <Stack.Screen name="Login" component={LoginScreen} />
+  <Stack.Screen name="MainTabs" component={TabNavigator} />
+  <Stack.Screen name="GestureTestScreen" component={GestureTestScreen} />
+</Stack.Navigator>
           </NavigationContainer>
           <StatusBar style="light" backgroundColor="#000" />
         </GestureHandlerRootView>

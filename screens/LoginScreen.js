@@ -183,6 +183,17 @@ export default function LoginScreen({ navigation }) {
           [DEV] Go To Main Tabs
         </Text>
       </TouchableOpacity>
+      <TouchableOpacity onPress={() => {
+  navigation.reset({
+    index: 0,
+    routes: [{ name: 'GestureTestScreen' }],
+  });
+}}>
+  <Text style={{ color: '#0f0', textAlign: 'center', marginTop: 10 }}>
+    [DEV] Go To GestureTestScreen
+  </Text>
+</TouchableOpacity>
+
     </View>
   );
 }
