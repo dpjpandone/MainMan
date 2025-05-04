@@ -4,7 +4,7 @@ import { Modal, TouchableOpacity, Text } from 'react-native';
 import { styles } from '../styles/globalStyles';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
-import { SUPABASE_URL, SUPABASE_BUCKET, SUPABASE_KEY } from './supaBaseConfig';
+import { supabase, SUPABASE_BUCKET } from './supaBaseConfig';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 
@@ -139,25 +139,31 @@ export function FullscreenImageViewer({
 export async function deleteProcedureImage({ uriToDelete, imageUrls, procedureId, setImageUrls, refreshMachine }) {
   try {
     const imageName = uriToDelete.split('/').pop();
-    const deleteUrl = `${SUPABASE_URL}/storage/v1/object/${SUPABASE_BUCKET}/${imageName}`;
-    await fetch(deleteUrl, {
-      method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${SUPABASE_KEY}` }
-    });
 
+    // Delete from Supabase Storage
+    const { error: storageError } = await supabase
+      .storage
+      .from(SUPABASE_BUCKET)
+      .remove([imageName]);
+
+    if (storageError) {
+      console.error('Error deleting image from storage:', storageError);
+      return;
+    }
+
+    // Update image_urls in procedures table
     const updatedImages = imageUrls.filter(uri => uri !== uriToDelete);
     setImageUrls(updatedImages);
 
-    await fetch(`${SUPABASE_URL}/rest/v1/procedures?id=eq.${procedureId}`, {
-      method: 'PATCH',
-      headers: {
-        'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`,
-        'Content-Type': 'application/json',
-        'Prefer': 'return=minimal',
-      },
-      body: JSON.stringify({ image_urls: updatedImages }),
-    });
+    const { error: updateError } = await supabase
+      .from('procedures')
+      .update({ image_urls: updatedImages })
+      .eq('id', procedureId);
+
+    if (updateError) {
+      console.error('Error updating procedure image_urls:', updateError);
+      return;
+    }
 
     if (refreshMachine) refreshMachine();
   } catch (error) {
@@ -174,41 +180,44 @@ export async function uploadProcedureImage({ procedureId, imageUrls, setImageUrl
   });
 
   if (!result.canceled && result.assets?.length > 0) {
-    const uri = result.assets[0].uri;
+    const asset = result.assets[0];
     const fileName = `${procedureId}-${Date.now()}.jpg`;
-    const uploadUrl = `${SUPABASE_URL}/storage/v1/object/${SUPABASE_BUCKET}/${fileName}`;
 
-    const response = await FileSystem.uploadAsync(uploadUrl, uri, {
-      httpMethod: 'PUT',
-      headers: {
-        'Authorization': `Bearer ${SUPABASE_KEY}`,
-        'Content-Type': 'image/jpeg',
-        'x-upsert': 'true',
-      },
-      uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
-    });
+    const response = await supabase.storage
+      .from(SUPABASE_BUCKET)
+      .upload(fileName, {
+        uri: asset.uri,
+        type: 'image/jpeg',
+        name: fileName,
+      }, { upsert: true });
 
-    if (response.status === 200) {
-      const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_BUCKET}/${fileName}`;
-      const updated = [...imageUrls, publicUrl];
-      setImageUrls(updated);
-
-      await fetch(`${SUPABASE_URL}/rest/v1/procedures?id=eq.${procedureId}`, {
-        method: 'PATCH',
-        headers: {
-          'apikey': SUPABASE_KEY,
-          'Authorization': `Bearer ${SUPABASE_KEY}`,
-          'Content-Type': 'application/json',
-          'Prefer': 'return=minimal',
-        },
-        body: JSON.stringify({ image_urls: updated }),
-      });
-
-      setTimeout(() => {
-        if (scrollToEnd) scrollToEnd();
-      }, 300);
-    } else {
-      alert(`Upload failed: ${response.status}`);
+    if (response.error) {
+      console.error('Image upload error:', response.error);
+      alert(`Upload failed: ${response.error.message}`);
+      return;
     }
+
+    const { data } = supabase
+      .storage
+      .from(SUPABASE_BUCKET)
+      .getPublicUrl(fileName);
+
+    const publicUrl = data.publicUrl;
+    const updated = [...imageUrls, publicUrl];
+    setImageUrls(updated);
+
+    const { error: updateError } = await supabase
+      .from('procedures')
+      .update({ image_urls: updated })
+      .eq('id', procedureId);
+
+    if (updateError) {
+      console.error('Error updating procedure image_urls:', updateError);
+      return;
+    }
+
+    setTimeout(() => {
+      if (scrollToEnd) scrollToEnd();
+    }, 300);
   }
 }

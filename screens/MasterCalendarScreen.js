@@ -13,7 +13,7 @@ import { Calendar } from 'react-native-calendars';
 import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { styles } from '../styles/globalStyles';
-import { SUPABASE_URL, SUPABASE_KEY } from '../utils/supaBaseConfig';
+import { supabase } from '../utils/supaBaseConfig';
 
 export default function MasterCalendarScreen() {
   const [selectedDate, setSelectedDate] = useState(null);
@@ -25,30 +25,28 @@ export default function MasterCalendarScreen() {
   const [companyId, setCompanyId] = useState(null);
   const navigation = useNavigation();
   const [expandedId, setExpandedId] = useState(null);
-  
+  const [markedDates, setMarkedDates] = useState({});
+
   const loadNonRoutineProcedures = async (companyId) => {
     console.log('Loading non-routine procedures for companyId:', companyId);
-  
     try {
-      const response = await fetch(`${SUPABASE_URL}/rest/v1/non_routine_procedures?company_id=eq.${companyId}&order=due_date.asc`, {
-        method: 'GET',
-        headers: {
-          'apikey': SUPABASE_KEY,
-          'Authorization': `Bearer ${SUPABASE_KEY}`,
-        },
-      });
+      const { data, error } = await supabase
+        .from('non_routine_procedures')
+        .select('*')
+        .eq('company_id', companyId)
+        .order('due_date', { ascending: true });
   
-      const data = await response.json();
-      console.log('Fetched procedures:', data);
+      if (error) throw error;
   
       const now = new Date();
-      const enriched = (data || []).map((proc) => {
+      const marks = {};
+      const enriched = data.map((proc) => {
         const due = new Date(proc.due_date);
+        const isoDate = due.toISOString().split('T')[0];
         const diffDays = Math.floor((due - now) / (1000 * 60 * 60 * 24));
   
         let color = 'blue';
         let status = `Due in ${diffDays} days`;
-  
         if (diffDays < 0) {
           color = 'red';
           status = 'Past Due';
@@ -56,20 +54,22 @@ export default function MasterCalendarScreen() {
           color = 'orange';
         }
   
-        return {
-          ...proc,
-          dueDate: due,
-          color,
-          status,
+        // ✅ Add calendar dot
+        marks[isoDate] = {
+          selected: true,
+          selectedColor: color,
         };
+          
+        return { ...proc, dueDate: due, color, status };
       });
   
+      setMarkedDates(marks);
       setNonRoutineProcedures(enriched);
     } catch (error) {
       console.error('Error fetching non-routine procedures:', error);
     }
   };
-  
+      
   const scheduleProcedure = async () => {
     console.log('--- Schedule Button Pressed ---');
     console.log('companyId:', companyId);
@@ -92,37 +92,28 @@ export default function MasterCalendarScreen() {
     };
   
     try {
-      const response = await fetch(`${SUPABASE_URL}/rest/v1/non_routine_procedures`, {
-        method: 'POST',
-        headers: {
-          'apikey': SUPABASE_KEY,
-          'Authorization': `Bearer ${SUPABASE_KEY}`,
-          'Content-Type': 'application/json',
-          'Prefer': 'return=minimal',
-        },
-        body: JSON.stringify(payload),
-      });
+      const { error } = await supabase
+        .from('non_routine_procedures')
+        .insert([payload]);
   
-      console.log('Supabase insert status:', response.status);
-  
-      if (response.ok) {
-        console.log('Non-routine procedure inserted successfully');
-        setModalVisible(false);
-        setMachineName('');
-        setProcedureName('');
-        setProcedureDescription('');
-        loadNonRoutineProcedures(companyId);
-      } else {
-        const errorText = await response.text();
-        console.error('Insert failed:', errorText);
-        Alert.alert('Insert Error', errorText);
+      if (error) {
+        console.error('Insert failed:', error.message);
+        Alert.alert('Insert Error', error.message);
+        return;
       }
+  
+      console.log('Non-routine procedure inserted successfully');
+      setModalVisible(false);
+      setMachineName('');
+      setProcedureName('');
+      setProcedureDescription('');
+      loadNonRoutineProcedures(companyId);
     } catch (error) {
-      console.error('Network or parsing error:', error);
+      console.error('Unexpected error during insert:', error);
       Alert.alert('Error', 'Something went wrong during scheduling.');
     }
   };
-
+  
   const deleteNonRoutineProcedure = async (id) => {
     Alert.alert(
       'Delete Procedure',
@@ -134,27 +125,22 @@ export default function MasterCalendarScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              const response = await fetch(`${SUPABASE_URL}/rest/v1/non_routine_procedures?id=eq.${id}&company_id=eq.${companyId}`, {
-                method: 'DELETE',
-                headers: {
-                  'apikey': SUPABASE_KEY,
-                  'Authorization': `Bearer ${SUPABASE_KEY}`,
-                  'Prefer': 'return=minimal',
-                },
-              });
+              const { error } = await supabase
+                .from('non_routine_procedures')
+                .delete()
+                .eq('id', id)
+                .eq('company_id', companyId);
   
-              console.log('Delete status:', response.status);
-  
-              if (response.ok) {
-                console.log('Procedure deleted successfully');
-                loadNonRoutineProcedures(companyId);
-              } else {
-                const errorText = await response.text();
-                console.error('Delete failed:', errorText);
-                Alert.alert('Delete Error', errorText);
+              if (error) {
+                console.error('Delete failed:', error.message);
+                Alert.alert('Delete Error', error.message);
+                return;
               }
+  
+              console.log('Procedure deleted successfully');
+              loadNonRoutineProcedures(companyId);
             } catch (error) {
-              console.error('Network error during delete:', error);
+              console.error('Unexpected error during delete:', error);
               Alert.alert('Error', 'Something went wrong during delete.');
             }
           },
@@ -162,7 +148,7 @@ export default function MasterCalendarScreen() {
       ]
     );
   };
-    
+      
   useEffect(() => {
     const init = async () => {
       console.log('Initializing MasterCalendarScreen...');
@@ -195,24 +181,25 @@ export default function MasterCalendarScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.calendarContainer}>
-        <Calendar
-          markingType="simple"
-          onDayPress={(day) => {
-            console.log('Date selected:', day.dateString);
-            setSelectedDate(day.dateString);
-            setModalVisible(true);
-          }}
-          theme={{
-            backgroundColor: '#000',
-            calendarBackground: '#000',
-            textSectionTitleColor: '#0f0',
-            dayTextColor: '#fff',
-            todayTextColor: '#0f0',
-            arrowColor: '#0f0',
-            monthTextColor: '#0f0',
-            selectedDayBackgroundColor: '#0f0',
-          }}
-        />
+      <Calendar
+  markingType="simple"
+  markedDates={markedDates} // <-- here
+  onDayPress={(day) => {
+    console.log('Date selected:', day.dateString);
+    setSelectedDate(day.dateString);
+    setModalVisible(true);
+  }}
+  theme={{
+    backgroundColor: '#000',
+    calendarBackground: '#000',
+    textSectionTitleColor: '#0f0',
+    dayTextColor: '#fff',
+    todayTextColor: '#0f0',
+    arrowColor: '#0f0',
+    monthTextColor: '#0f0',
+    selectedDayBackgroundColor: '#0f0',
+  }}
+/>
       </View>
 
       <ScrollView style={styles.procedureListContainer}>

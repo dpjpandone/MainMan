@@ -2,7 +2,7 @@
 
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
-import { SUPABASE_URL, SUPABASE_BUCKET, SUPABASE_KEY } from './supaBaseConfig';
+import { SUPABASE_URL, SUPABASE_BUCKET, SUPABASE_KEY, supabase } from './supaBaseConfig';
 import React, { useState } from 'react';
 import { Modal, View, Text, TextInput, TouchableOpacity, Image } from 'react-native';
 import { styles } from '../styles/globalStyles';
@@ -49,88 +49,77 @@ export function FileLabelPrompt({ visible, onSubmit, onCancel }) {
   }
 
   export async function uploadProcedureFile({
-  procedureId,
-  fileUrls,
-  setFileUrls,
-  scrollToEnd,
-  fileLabels,
-  setFileLabels,
-  label,
-}) {
-  try {
-    console.log('Opening document picker...');
-    const result = await DocumentPicker.getDocumentAsync({
-      type: 'application/pdf',
-      copyToCacheDirectory: true,
-      multiple: false,
-    });
-
-    console.log('Picker result:', result);
-
-    if (!result.canceled && result.assets?.length > 0) {
-      const file = result.assets[0];
-      const uri = file.uri;
-      const sanitizedLabel = label?.trim().replace(/[^a-z0-9_\-]/gi, '_') || 'Untitled';
-      const fileName = `${sanitizedLabel}-${procedureId}-${Date.now()}.pdf`;
-      const uploadUrl = `${SUPABASE_URL}/storage/v1/object/${SUPABASE_BUCKET}/${fileName}`;
-
-      console.log('Selected file:', uri);
-      console.log('Uploading to:', uploadUrl);
-      
-// Temporary hardcoded label (we'll replace with modal input later)
-const userLabel = label?.trim() || 'Untitled PDF';
-
-const uploadResponse = await FileSystem.uploadAsync(uploadUrl, uri, {
-  httpMethod: 'PUT',
-  headers: {
-    'Authorization': `Bearer ${SUPABASE_KEY}`,
-    'Content-Type': 'application/pdf',
-    'x-upsert': 'true',
-  },
-  uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
-});
-
-      console.log('Upload response:', uploadResponse);
-
-      if (uploadResponse.status === 200) {
+    procedureId,
+    fileUrls,
+    setFileUrls,
+    scrollToEnd,
+    fileLabels,
+    setFileLabels,
+    label,
+  }) {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'application/pdf',
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+  
+      if (!result.canceled && result.assets?.length > 0) {
+        const file = result.assets[0];
+        const uri = file.uri;
+  
+        const sanitizedLabel = label?.trim().replace(/[^a-z0-9_\-]/gi, '_') || 'Untitled';
+        const fileName = `${sanitizedLabel}-${procedureId}-${Date.now()}.pdf`;
+        const uploadUrl = `${SUPABASE_URL}/storage/v1/object/${SUPABASE_BUCKET}/${fileName}`;
+  
+        const uploadResponse = await FileSystem.uploadAsync(uploadUrl, uri, {
+          httpMethod: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${SUPABASE_KEY}`,
+            'Content-Type': 'application/pdf',
+            'x-upsert': 'true',
+          },
+          uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+        });
+  
+        if (uploadResponse.status !== 200) {
+          console.error('Upload failed:', uploadResponse);
+          alert(`Upload failed: ${uploadResponse.status}`);
+          return;
+        }
+  
         const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_BUCKET}/${fileName}`;
         const updatedUrls = [...(fileUrls || []), publicUrl];
-        const updatedLabels = [...(fileLabels || []), userLabel];
+        const updatedLabels = [...(fileLabels || []), sanitizedLabel];
+  
         setFileUrls(updatedUrls);
         setFileLabels(updatedLabels);
-
-        console.log('Upload successful, updating procedure record:', publicUrl);
-
-        await fetch(`${SUPABASE_URL}/rest/v1/procedures?id=eq.${procedureId}`, {
-          method: 'PATCH',
-          headers: {
-            'apikey': SUPABASE_KEY,
-            'Authorization': `Bearer ${SUPABASE_KEY}`,
-            'Content-Type': 'application/json',
-            'Prefer': 'return=minimal',
-          },
-          body: JSON.stringify({
+  
+        const { error: patchError } = await supabase
+          .from('procedures')
+          .update({
             file_urls: updatedUrls,
             file_labels: updatedLabels,
-          }),
-        });
-
+          })
+          .eq('id', procedureId);
+  
+        if (patchError) {
+          console.error('Update error:', patchError.message);
+          alert(`Failed to save file info: ${patchError.message}`);
+          return;
+        }
+  
         setTimeout(() => {
           if (scrollToEnd) scrollToEnd();
         }, 300);
-      } else {
-        alert(`Upload failed: ${uploadResponse.status}`);
       }
-    } else {
-      console.log('No file selected or picker cancelled.');
+    } catch (err) {
+      console.error('File upload error:', err);
+      alert('Upload failed: ' + err.message);
     }
-  } catch (err) {
-    console.error('File upload error:', err);
-    alert('Upload failed: ' + err.message);
   }
-}
-  
-export async function deleteProcedureFile({
+          
+  export async function deleteProcedureFile({
     uriToDelete,
     fileUrls,
     setFileUrls,
@@ -141,49 +130,42 @@ export async function deleteProcedureFile({
   }) {
     try {
       const fileName = uriToDelete.split('/').pop();
-      const deleteUrl = `${SUPABASE_URL}/storage/v1/object/${SUPABASE_BUCKET}/${fileName}`;
-      console.log('[DELETE] Initiating file deletion:', deleteUrl);
   
-      const deleteResponse = await fetch(deleteUrl, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${SUPABASE_KEY}` },
-      });
+      const { error: storageError } = await supabase
+        .storage
+        .from(SUPABASE_BUCKET)
+        .remove([fileName]);
   
-      console.log('[DELETE] Storage response status:', deleteResponse.status);
+      if (storageError) {
+        console.error('Supabase storage delete error:', storageError.message);
+        return;
+      }
   
-      const updatedFiles = (fileUrls || []).filter((uri) => uri !== uriToDelete);
-      const updatedLabels = (fileLabels || []).filter((_, i) => fileUrls[i] !== uriToDelete);
+      const updatedUrls = fileUrls.filter((uri) => uri !== uriToDelete);
+      const updatedLabels = fileLabels.filter((_, i) => fileUrls[i] !== uriToDelete);
   
-      console.log('[PATCH] Updated fileUrls:', updatedFiles);
-      console.log('[PATCH] Updated fileLabels:', updatedLabels);
-  
-      setFileUrls(updatedFiles);
+      setFileUrls(updatedUrls);
       setFileLabels(updatedLabels);
   
-      const patchResponse = await fetch(`${SUPABASE_URL}/rest/v1/procedures?id=eq.${procedureId}`, {
-        method: 'PATCH',
-        headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_KEY}`,
-          'Content-Type': 'application/json',
-          Prefer: 'return=minimal',
-        },
-        body: JSON.stringify({
-          file_urls: updatedFiles,
+      const { error: dbError } = await supabase
+        .from('procedures')
+        .update({
+          file_urls: updatedUrls,
           file_labels: updatedLabels,
-        }),
-      });
+        })
+        .eq('id', procedureId);
   
-      console.log('[PATCH] Supabase response status:', patchResponse.status);
-      const resultText = await patchResponse.text();
-      console.log('[PATCH] Supabase response body:', resultText || '(empty)');
+      if (dbError) {
+        console.error('Supabase DB update error:', dbError.message);
+        return;
+      }
   
       if (refreshMachine) refreshMachine();
     } catch (error) {
-      console.error('[ERROR] Failed to delete file:', error);
+      console.error('Failed to delete file:', error);
     }
   }
-        
+          
 
 export function AttachmentGridViewer({
     imageUrls,

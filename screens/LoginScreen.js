@@ -8,11 +8,7 @@ import * as SecureStore from 'expo-secure-store'; // 🔥 New!
 import { AppContext } from '../contexts/AppContext';
 import RegisterCompanyModal from './RegisterCompanyModal';
 import AddUserModal from './AddUserModal';
-import { createClient } from '@supabase/supabase-js';
-import { SUPABASE_URL, SUPABASE_KEY } from '../utils/supaBaseConfig';
-import GestureSharedValueTest from '../tests/GestureSharedValueTest';
-// Initialize Supabase client
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+import { supabase } from '../utils/supaBaseConfig';
 
 export default function LoginScreen({ navigation }) {
   const { loginData, setLoginData } = useContext(AppContext);
@@ -33,7 +29,6 @@ export default function LoginScreen({ navigation }) {
           console.log('Stored credentials found. Pre-filling login fields...');
           setEmail(storedEmail);
           setPassword(storedPassword);
-          // 👇 NO auto-login call here
         }
       } catch (error) {
         console.error('Error accessing stored credentials:', error);
@@ -164,7 +159,7 @@ export default function LoginScreen({ navigation }) {
         />
       )}
 
-      {showAddUserModal && loginData && (
+      {showAddUserModal && loginData?.role === 'admin' && (
         <AddUserModal
           visible={showAddUserModal}
           onClose={() => setShowAddUserModal(false)}
@@ -172,37 +167,19 @@ export default function LoginScreen({ navigation }) {
         />
       )}
 
-      {/* DEV Button */}
-      <TouchableOpacity onPress={() => {
-        navigation.reset({
-          index: 0,
-          routes: [{ name: 'MainTabs' }],
-        });
-      }}>
-        <Text style={{ color: '#0f0', textAlign: 'center', marginTop: 40 }}>
-          [DEV] Go To Main Tabs
-        </Text>
-      </TouchableOpacity>
-      <TouchableOpacity onPress={() => {
-  navigation.reset({
-    index: 0,
-    routes: [{ name: 'GestureTestScreen' }],
-  });
-}}>
-  <Text style={{ color: '#0f0', textAlign: 'center', marginTop: 10 }}>
-    [DEV] Go To GestureTestScreen
-  </Text>
-</TouchableOpacity>
-<TouchableOpacity onPress={() => {
-  navigation.reset({
-    index: 0,
-    routes: [{ name: 'GestureSharedValueTest' }],
-  });
-}}>
-  <Text style={{ color: '#0f0', textAlign: 'center', marginTop: 10 }}>
-    [DEV] Go To GestureSharedValueTest
-  </Text>
-</TouchableOpacity>
+{loginData?.role === 'admin' && (
+  <TouchableOpacity
+    onPress={async () => {
+      await AsyncStorage.removeItem('loginData');
+      setLoginData(null);
+    }}
+  >
+    <Text style={{ color: '#FF0000', textAlign: 'center', marginTop: 20 }}>
+      [ Log Out ]
+    </Text>
+  </TouchableOpacity>
+)}
+
 
     </View>
   );

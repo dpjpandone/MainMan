@@ -11,17 +11,15 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { styles } from '../styles/globalStyles';
-import { createClient } from '@supabase/supabase-js';
-import { SUPABASE_URL, SUPABASE_KEY } from '../utils/supaBaseConfig';
+import { supabase } from '../utils/supaBaseConfig';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSync } from '../contexts/SyncContext';
-
-// Initialize Supabase client
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+import { AppContext } from '../contexts/AppContext';
+import { useContext } from 'react';
 
 export default function HomeScreen({ navigation }) {
   const { setIsSyncing } = useSync();
-
+  const { setLoginData } = useContext(AppContext);
   const [machines, setMachines] = useState([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [newMachineName, setNewMachineName] = useState('');
@@ -31,24 +29,23 @@ export default function HomeScreen({ navigation }) {
     const fetchCompanyAndMachines = async () => {
       try {
         setIsSyncing(true);
-        await new Promise((resolve) => setTimeout(resolve, 2000)); 
   
         const session = await AsyncStorage.getItem('loginData');
         const parsedSession = JSON.parse(session);
-        const companyId = parsedSession?.companyId;
+        const company_id = parsedSession?.companyId;
   
-        if (!companyId) {
+        if (!company_id) {
           console.error('No companyId found.');
           return;
         }
   
-        setCompanyId(companyId);
-        console.log('Loaded companyId:', companyId);
+        setCompanyId(company_id);
+        console.log('Loaded companyId:', company_id);
   
         const { data, error } = await supabase
           .from('machines')
           .select('*')
-          .eq('company_id', companyId);
+          .eq('company_id', company_id);
   
         if (error) {
           console.error('Error fetching machines:', error.message);
@@ -65,7 +62,7 @@ export default function HomeScreen({ navigation }) {
     const unsubscribe = navigation.addListener('focus', fetchCompanyAndMachines);
     return unsubscribe;
   }, [navigation]);
-          
+            
 
   const goToMachine = (machineId) => {
     navigation.navigate('MachineScreen', { machineId });
@@ -142,20 +139,13 @@ export default function HomeScreen({ navigation }) {
     );
   };
 
-  const handleDevLogout = async () => {
-    await AsyncStorage.removeItem('loginData');
-    navigation.reset({
-      index: 0,
-      routes: [{ name: 'Login' }],
-    });
-  };
 
   return (
     <View style={styles.container}>
       <Text style={styles.header}>Machines</Text>
      
       <TouchableOpacity
-  onPress={() => navigation.reset({ index: 0, routes: [{ name: 'Login' }] })}
+  onPress={() => navigation.navigate('Login')}
   style={styles.settingsIcon}
 >
   <MaterialCommunityIcons name="cog-outline" size={26} color="#0f0" />
@@ -163,7 +153,7 @@ export default function HomeScreen({ navigation }) {
 
       <FlatList
         data={machines}
-        keyExtractor={(item) => item.id.toString()}
+        keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <View style={styles.machineItem}>
             <TouchableOpacity

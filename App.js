@@ -18,10 +18,8 @@ import HomeScreen from './screens/HomeScreen';
 import MasterCalendarScreen from './screens/MasterCalendarScreen';
 import MachineScreen from './screens/MachineScreen';
 import ChecklistScreen from './screens/ChecklistScreen';
-import UploadTestScreen from './screens/UploadTestScreen';
-import GestureTestScreen from './screens/GestureTestScreen';
-import GestureSharedValueTest from './tests/GestureSharedValueTest';
 import { SyncProvider, SyncBanner } from './contexts/SyncContext';
+
 // Create Navigators
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -32,8 +30,6 @@ function MachinesStackNavigator() {
     <MachinesStack.Navigator screenOptions={{ headerShown: false }}>
       <MachinesStack.Screen name="Home" component={HomeScreen} />
       <MachinesStack.Screen name="MachineScreen" component={MachineScreen} />
-      <MachinesStack.Screen name="UploadTest" component={UploadTestScreen} />
-      <MachinesStack.Screen name="GestureTest" component={GestureTestScreen} />
     </MachinesStack.Navigator>
   );
 }
@@ -97,15 +93,16 @@ export default function App() {
         <SafeAreaProvider>
           <GestureHandlerRootView style={{ flex: 1 }}>
             <NavigationContainer>
-              <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Login">
+              <Stack.Navigator
+                screenOptions={{ headerShown: false }}
+                initialRouteName={loginData ? 'MainTabs' : 'Login'}
+              >
                 <Stack.Screen name="Login" component={LoginScreen} />
                 <Stack.Screen name="MainTabs" component={TabNavigator} />
-                <Stack.Screen name="GestureTestScreen" component={GestureTestScreen} />
-                <Stack.Screen name="GestureSharedValueTest" component={GestureSharedValueTest} />
               </Stack.Navigator>
             </NavigationContainer>
             <StatusBar style="light" backgroundColor="#000" />
-            <SyncBanner /> 
+            <SyncBanner />
           </GestureHandlerRootView>
         </SafeAreaProvider>
       </SyncProvider>

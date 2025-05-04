@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, Modal, Alert, ScrollView, TextInput, StatusBar, Keyboard } from 'react-native';
 import { styles } from '../styles/globalStyles';
 import { FullscreenImageViewerController, deleteProcedureImage, uploadProcedureImage } from '../utils/imageUtils';
-import { SUPABASE_URL, SUPABASE_BUCKET, SUPABASE_KEY } from '../utils/supaBaseConfig';
+import { supabase, SUPABASE_BUCKET } from '../utils/supaBaseConfig';
 import { InteractionManager } from 'react-native';
 import { uploadProcedureFile, deleteProcedureFile, AttachmentGridViewer, FileLabelPrompt } from '../utils/fileUtils';
 import * as Linking from 'expo-linking';
@@ -65,25 +65,22 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
   useEffect(() => {
     const fetchFreshStatus = async () => {
       try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/procedures?id=eq.${item.id}`, {
-          method: 'GET',
-          headers: {
-            apikey: SUPABASE_KEY,
-            Authorization: `Bearer ${SUPABASE_KEY}`,
-            Accept: 'application/json',
-          },
-        });
+        const { data, error } = await supabase
+          .from('procedures')
+          .select('last_completed, interval_days')
+          .eq('id', item.id)
+          .single();
   
-        const data = await res.json();
-        if (data.length > 0) {
-          const proc = data[0];
-          const newLastCompleted = proc.last_completed ? new Date(proc.last_completed) : null;
-          const newInterval = proc.interval_days || 0;
+        if (error) throw error;
   
-          const overdue = !newLastCompleted || (Math.floor((Date.now() - newLastCompleted) / 86400000) > newInterval);
+        const newLastCompleted = data.last_completed ? new Date(data.last_completed) : null;
+        const newInterval = data.interval_days || 0;
   
-          setBgColor(overdue ? '#e4001e' : '#003300'); // flash or green
-        }
+        const overdue =
+          !newLastCompleted ||
+          Math.floor((Date.now() - newLastCompleted) / 86400000) > newInterval;
+  
+        setBgColor(overdue ? '#e4001e' : '#003300');
       } catch (err) {
         console.error('[CARD] Failed to fetch updated status:', err);
       }
@@ -91,22 +88,20 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
   
     fetchFreshStatus();
   }, [item.id]);
-
+  
   useEffect(() => {
     const fetchInitials = async () => {
       if (!item.completed_by) return;
   
       try {
-        const response = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${item.completed_by}`, {
-          headers: {
-            'apikey': SUPABASE_KEY,
-            'Authorization': `Bearer ${SUPABASE_KEY}`,
-          },
-        });
-        const data = await response.json();
-        if (data.length > 0 && data[0].initials) {
-          setInitials(data[0].initials);
-        }
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('initials')
+          .eq('id', item.completed_by)
+          .single();
+  
+        if (error) throw error;
+        if (data?.initials) setInitials(data.initials);
       } catch (error) {
         console.error('[CARD] Error fetching initials:', error);
       }
@@ -114,7 +109,7 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
   
     fetchInitials();
   }, [item.completed_by]);
-  
+    
 
   useEffect(() => {
     const showSubscription = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
@@ -149,28 +144,25 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
   
   const openModal = async () => {
     try {
-      const response = await fetch(`${SUPABASE_URL}/rest/v1/procedures?id=eq.${item.id}`, {
-        method: 'GET',
-        headers: {
-          'apikey': SUPABASE_KEY,
-          'Authorization': `Bearer ${SUPABASE_KEY}`,
-        },
-      });
-  
-      const data = await response.json();
-      console.log('[MODAL] Fetching latest procedure:', item.id);
-      console.log('[MODAL] Supabase GET response:', data[0]);
-  
-      if (data.length > 0) {
-        const latest = data[0];
-        setDescription(latest.description || '');
-        setImageUrls(latest.image_urls || []);
-        setFileUrls(latest.file_urls || []);
-        setFileLabels(latest.file_labels || []);
-      } else {
-        console.error('Procedure not found.');
-      }
-  
+      const { data, error } = await supabase
+      .from('procedures')
+      .select('description, image_urls, file_urls, file_labels')
+      .eq('id', item.id)
+      .single();
+    
+    console.log('[MODAL] Fetching latest procedure:', item.id);
+    console.log('[MODAL] Supabase GET response:', data);
+    
+    if (error || !data) {
+      console.error('Procedure not found or error:', error);
+      return;
+    }
+    
+    setDescription(data.description || '');
+    setImageUrls(data.image_urls || []);
+    setFileUrls(data.file_urls || []);
+    setFileLabels(data.file_labels || []);
+      
       setEditMode(false);
       setImageEditMode(false);
       setModalVisible(true);
@@ -194,22 +186,18 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
     
   const saveDescription = async () => {
     try {
-      await fetch(`${SUPABASE_URL}/rest/v1/procedures?id=eq.${item.id}`, {
-        method: 'PATCH',
-        headers: {
-          'apikey': SUPABASE_KEY,
-          'Authorization': `Bearer ${SUPABASE_KEY}`,
-          'Content-Type': 'application/json',
-          'Prefer': 'return=minimal',
-        },
-        body: JSON.stringify({
-          description,
-          image_urls: imageUrls,
-          file_urls: fileUrls,
-          file_labels: fileLabels,
-        }),
-      });
-  
+      const { error } = await supabase
+      .from('procedures')
+      .update({
+        description,
+        image_urls: imageUrls,
+        file_urls: fileUrls,
+        file_labels: fileLabels,
+      })
+      .eq('id', item.id);
+    
+    if (error) throw error;
+      
       setEditMode(false);       
       setImageEditMode(false);
     } catch (error) {
@@ -220,24 +208,24 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
   const handleBack = async () => {
     if (editMode) {
       try {
-        const response = await fetch(`${SUPABASE_URL}/rest/v1/procedures?id=eq.${item.id}`, {
-          method: 'GET',
-          headers: {
-            'apikey': SUPABASE_KEY,
-            'Authorization': `Bearer ${SUPABASE_KEY}`,
-          },
-        });
-  
-        const data = await response.json();
-        const latest = data[0];
-  
-        setEditMode(false);
-        setImageEditMode(false);
-        setDescription(latest.description || '');
-        setImageUrls(latest.image_urls || []);
-        setFileUrls(latest.file_urls || []);
-        setFileLabels(latest.file_labels || []);
-      } catch (error) {
+        const { data, error } = await supabase
+        .from('procedures')
+        .select('description, image_urls, file_urls, file_labels')
+        .eq('id', item.id)
+        .single();
+      
+      if (error || !data) {
+        console.error('Error restoring procedure state:', error);
+        return;
+      }
+      
+      setEditMode(false);
+      setImageEditMode(false);
+      setDescription(data.description || '');
+      setImageUrls(data.image_urls || []);
+      setFileUrls(data.file_urls || []);
+      setFileLabels(data.file_labels || []);
+            } catch (error) {
         console.error('Error restoring state on back:', error);
       }
     } else {
@@ -278,15 +266,13 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
                 }
 
                 // Delete procedure record from Supabase
-                await fetch(`${SUPABASE_URL}/rest/v1/procedures?id=eq.${item.id}`, {
-                  method: 'DELETE',
-                  headers: {
-                    'apikey': SUPABASE_KEY,
-                    'Authorization': `Bearer ${SUPABASE_KEY}`,
-                    'Prefer': 'return=minimal',
-                  }
-                });
-
+                const { error } = await supabase
+                .from('procedures')
+                .delete()
+                .eq('id', item.id);
+              
+              if (error) throw error;
+              
                 onDelete(item.id);  // Notify parent to refresh
                 setModalVisible(false);
               } catch (error) {

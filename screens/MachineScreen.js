@@ -5,7 +5,7 @@ import { View, Text, FlatList, TouchableOpacity, Modal, TextInput, Alert } from 
 import { styles } from '../styles/globalStyles';
 import ProcedureCard from '../components/ProcedureCard';
 import { useRoute, useFocusEffect } from '@react-navigation/native';
-import { SUPABASE_URL, SUPABASE_KEY } from '../utils/supaBaseConfig';
+import { supabase } from '../utils/supaBaseConfig';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 import { Calendar } from 'react-native-calendars';
@@ -31,37 +31,35 @@ export default function MachineScreen() {
       
   const loadMachineAndProcedures = async () => {
     try {
-      // Fetch machine name
-      const machineResponse = await fetch(`${SUPABASE_URL}/rest/v1/machines?id=eq.${machineId}`, {
-        method: 'GET',
-        headers: {
-          'apikey': SUPABASE_KEY,
-          'Authorization': `Bearer ${SUPABASE_KEY}`,
-        },
-      });
-      const machineData = await machineResponse.json();
-      if (machineData.length === 0) {
-        console.error('Machine not found.');
+      const { data: machineData, error: machineError } = await supabase
+        .from('machines')
+        .select('*')
+        .eq('id', machineId)
+        .single();
+  
+      if (machineError || !machineData) {
+        console.error('Machine fetch error:', machineError);
         return;
       }
-
-      // Fetch procedures
-      const procedureResponse = await fetch(`${SUPABASE_URL}/rest/v1/procedures?machine_id=eq.${machineId}&order=last_completed.desc.nullsfirst`, {
-        method: 'GET',
-        headers: {
-          'apikey': SUPABASE_KEY,
-          'Authorization': `Bearer ${SUPABASE_KEY}`,
-        },
-      });
-      const procedureData = await procedureResponse.json();
-
-      setMachine(machineData[0]);
-      setProcedures(procedureData);
+  
+      const { data: procedureData, error: procedureError } = await supabase
+        .from('procedures')
+        .select('*')
+        .eq('machine_id', machineId)
+        .order('last_completed', { ascending: false, nullsFirst: true });
+  
+      if (procedureError) {
+        console.error('Procedure fetch error:', procedureError);
+        return;
+      }
+  
+      setMachine(machineData);
+      setProcedures(procedureData || []);
     } catch (error) {
       console.error('Error loading machine and procedures:', error);
     }
   };
-
+  
   const markComplete = async (proc) => {
     try {
       const now = new Date();
@@ -70,98 +68,86 @@ export default function MachineScreen() {
   
       const session = await AsyncStorage.getItem('loginData');
       const parsedSession = JSON.parse(session);
-      
-      console.log('[DEBUG] loginData:', parsedSession);
-        
-      console.log('Marking complete for procedure ID:', proc.id);
-      console.log('Setting last_completed:', now.toISOString());
-      console.log('Setting due_date:', dueDate.toISOString());
-      console.log('Setting completed_by:', parsedSession?.userId);
   
-      const response = await fetch(`${SUPABASE_URL}/rest/v1/procedures?id=eq.${proc.id}`, {
-        method: 'PATCH',
-        headers: {
-          'apikey': SUPABASE_KEY,
-          'Authorization': `Bearer ${SUPABASE_KEY}`,
-          'Content-Type': 'application/json',
-          'Prefer': 'return=minimal',
-        },
-        body: JSON.stringify({
+      const { error } = await supabase
+        .from('procedures')
+        .update({
           last_completed: now.toISOString(),
           due_date: dueDate.toISOString(),
-          completed_by: parsedSession?.userId, // ✅ NEW LINE
-        }),
-      });
+          completed_by: parsedSession?.userId,
+        })
+        .eq('id', proc.id);
   
-      console.log('Supabase patch response:', response.status);
+      if (error) {
+        console.error('Supabase update error:', error);
+        return;
+      }
   
       loadMachineAndProcedures();
     } catch (error) {
       console.error('Failed to mark procedure complete:', error);
     }
   };
-    
+      
   const deleteProcedure = async (procId) => {
     try {
-      await fetch(`${SUPABASE_URL}/rest/v1/procedures?id=eq.${procId}`, {
-        method: 'DELETE',
-        headers: {
-          'apikey': SUPABASE_KEY,
-          'Authorization': `Bearer ${SUPABASE_KEY}`,
-          'Prefer': 'return=minimal',
-        },
-      });
-
+      const { error } = await supabase
+        .from('procedures')
+        .delete()
+        .eq('id', procId);
+  
+      if (error) {
+        console.error('Supabase delete error:', error.message);
+        return;
+      }
+  
       loadMachineAndProcedures();
     } catch (error) {
       console.error('Failed to delete procedure:', error);
     }
   };
-
+  
  const addProcedure = async () => {
-    if (!name.trim() || !interval) return;
-  
-    try {
-      // 🔥 Load companyId first
-      const session = await AsyncStorage.getItem('loginData');
-      const parsedSession = JSON.parse(session);
-      const companyId = parsedSession?.companyId;
-  
-      if (!companyId) {
-        console.error('No companyId found for adding procedure.');
-        return;
-      }
-  
-      await fetch(`${SUPABASE_URL}/rest/v1/procedures`, {
-        method: 'POST',
-        headers: {
-          'apikey': SUPABASE_KEY,
-          'Authorization': `Bearer ${SUPABASE_KEY}`,
-          'Content-Type': 'application/json',
-          'Prefer': 'return=minimal',
-        },
-        body: JSON.stringify({
-          machine_id: machineId,
-          procedure_name: name.trim(),
-          description,
-          interval_days: parseInt(interval),
-          last_completed: startingDate.toISOString(),
-          due_date: null,
-          image_urls: [],
-          company_id: companyId,
-        }),
-      });
-  
-      setModalVisible(false);
-      setName('');
-      setInterval('');
-      setDescription('');
-      loadMachineAndProcedures();
-  
-    } catch (error) {
-      console.error('Failed to add procedure:', error);
+  if (!name.trim() || !interval) return;
+
+  try {
+    const session = await AsyncStorage.getItem('loginData');
+    const parsedSession = JSON.parse(session);
+    const companyId = parsedSession?.companyId;
+
+    if (!companyId) {
+      console.error('No companyId found for adding procedure.');
+      return;
     }
-  };
+
+    const { error } = await supabase
+      .from('procedures')
+      .insert([{
+        machine_id: machineId,
+        procedure_name: name.trim(),
+        description,
+        interval_days: parseInt(interval),
+        last_completed: startingDate.toISOString(),
+        due_date: null,
+        image_urls: [],
+        company_id: companyId,
+      }]);
+
+    if (error) {
+      console.error('Supabase insert error:', error.message);
+      return;
+    }
+
+    setModalVisible(false);
+    setName('');
+    setInterval('');
+    setDescription('');
+    loadMachineAndProcedures();
+
+  } catch (error) {
+    console.error('Failed to add procedure:', error);
+  }
+};
   
   const renderProcedure = ({ item }) => (
     <ProcedureCard

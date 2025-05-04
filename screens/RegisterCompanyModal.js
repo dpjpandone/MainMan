@@ -2,10 +2,7 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Modal, Alert } from 'react-native';
 import { styles } from '../styles/globalStyles';
-import { createClient } from '@supabase/supabase-js';
-import { SUPABASE_URL, SUPABASE_KEY } from '../utils/supaBaseConfig';
-
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+import { supabase } from '../utils/supaBaseConfig';
 
 export default function RegisterCompanyModal({ visible, onClose }) {
   const [companyName, setCompanyName] = useState('');

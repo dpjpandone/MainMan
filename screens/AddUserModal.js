@@ -2,15 +2,13 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Modal, Alert } from 'react-native';
 import { styles } from '../styles/globalStyles';
-import { SUPABASE_URL, SUPABASE_KEY } from '../utils/supaBaseConfig';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '../utils/supaBaseConfig';
 
 export default function AddUserModal({ visible, onClose, companyId }) {
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [initials, setInitials] = useState('');
-  const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
   
   const handleAddUser = async () => {
     if (!username.trim() || !password.trim() || !initials.trim()) {

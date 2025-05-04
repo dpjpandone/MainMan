@@ -5,11 +5,10 @@ import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { styles } from '../styles/globalStyles';
 import { createClient } from '@supabase/supabase-js';
-import { SUPABASE_URL, SUPABASE_KEY } from '../utils/supaBaseConfig';
+import { supabase } from '../utils/supaBaseConfig';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Initialize Supabase client
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 export default function ChecklistScreen() {
   const [pastDueProcedures, setPastDueProcedures] = useState([]);
@@ -56,7 +55,18 @@ export default function ChecklistScreen() {
           }
         }
       });
-
+      pastDue.sort((a, b) => {
+        const aDaysLate = Math.floor((now - new Date(a.last_completed)) / (1000 * 60 * 60 * 24)) - a.interval_days;
+        const bDaysLate = Math.floor((now - new Date(b.last_completed)) / (1000 * 60 * 60 * 24)) - b.interval_days;
+        return bDaysLate - aDaysLate; // most overdue first
+      });
+      
+      dueSoon.sort((a, b) => {
+        const aDaysLeft = a.interval_days - Math.floor((now - new Date(a.last_completed)) / (1000 * 60 * 60 * 24));
+        const bDaysLeft = b.interval_days - Math.floor((now - new Date(b.last_completed)) / (1000 * 60 * 60 * 24));
+        return aDaysLeft - bDaysLeft; // due sooner first
+      });
+      
       setPastDueProcedures(pastDue);
       setDueSoonProcedures(dueSoon);
     } catch (error) {
@@ -72,14 +82,14 @@ export default function ChecklistScreen() {
 
   return (
     <ScrollView style={styles.container}>
-      <Text style={{ color: '#0f0', textAlign: 'center', marginTop: 20 }}>
-        {`Past Due: ${pastDueProcedures.length}, Due Soon: ${dueSoonProcedures.length}`}
-      </Text>
+<Text style={{ color: '#fff', textAlign: 'center', marginTop: 20 }}>
+  {`${pastDueProcedures.length} Past Due / ${dueSoonProcedures.length} Due Soon`}
+</Text>
 
       {pastDueProcedures.length > 0 && (
         <>
-          <Text style={styles.header}>Past Due Procedures</Text>
-          {pastDueProcedures.map((item) => (
+<Text style={[styles.header, { color: '#f00' }]}>Past Due Procedures</Text>
+{pastDueProcedures.map((item) => (
             <ProcedureCard key={item.id} item={item} navigation={navigation} isPastDue />
           ))}
         </>
@@ -139,23 +149,26 @@ function ProcedureCard({ item, navigation, isPastDue: initialPastDue = false }) 
 
   const goToProcedure = (machineId) => {
     navigation.navigate('Machines', {
-      screen: 'Machine',
+      screen: 'MachineScreen',
       params: { machineId },
     });
   };
 
   return (
     <View style={styles.procCard}>
-      <Text style={[styles.procText, isPastDue && { color: textColor }]}>
-        {item.procedure_name}
-      </Text>
-      <Text style={styles.machineText}>Machine: {item.machineName}</Text>
-      <View style={styles.labelRow}>
-        <Text style={[styles.labelText, { color: labelColor }]}>{label}</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        {/* LEFT COLUMN */}
+        <View style={{ flex: 1, paddingRight: 10 }}>
+          <Text style={[styles.procText, isPastDue && { color: textColor }]}>{item.procedure_name}</Text>
+          <Text style={styles.machineText}>Machine: {item.machineName}</Text>
+          <Text style={[styles.labelText, { color: labelColor }]}>{label}</Text>
+        </View>
+
+        {/* RIGHT BUTTON */}
+        <TouchableOpacity style={[buttonStyle, { height: 40 }]} onPress={() => goToProcedure(item.machine_id)}>
+          <Text style={styles.buttonText}>VIEW</Text>
+        </TouchableOpacity>
       </View>
-      <TouchableOpacity style={buttonStyle} onPress={() => goToProcedure(item.machine_id)}>
-        <Text style={styles.buttonText}>Go to Procedure</Text>
-      </TouchableOpacity>
     </View>
   );
 }
