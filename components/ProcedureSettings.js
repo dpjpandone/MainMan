@@ -3,7 +3,7 @@ import { View, Text, Modal, TouchableOpacity, ActivityIndicator, TextInput, Aler
 import { Calendar } from 'react-native-calendars';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { styles } from '../styles/globalStyles';
-import { SUPABASE_URL, SUPABASE_KEY } from '../utils/supaBaseConfig';
+import { supabase } from '../utils/supaBaseConfig';
 
 export default function ProcedureSettings({ visible, onClose, procedureId }) {
   const [intervalDays, setIntervalDays] = useState('');
@@ -26,27 +26,21 @@ export default function ProcedureSettings({ visible, onClose, procedureId }) {
         }
         setCompanyId(resolvedCompanyId);
 
-        const url = `${SUPABASE_URL}/rest/v1/procedures?id=eq.${procedureId}&company_id=eq.${resolvedCompanyId}`;
-        const response = await fetch(url, {
-          method: 'GET',
-          headers: {
-            apikey: SUPABASE_KEY,
-            Authorization: `Bearer ${SUPABASE_KEY}`,
-            Accept: 'application/json',
-            Prefer: 'return=representation',
-          },
-        });
+        const { data, error } = await supabase
+        .from('procedures')
+        .select('*')
+        .eq('id', procedureId)
+        .eq('company_id', resolvedCompanyId)
+        .single(); // Since you're expecting one
 
-        const data = await response.json();
-        if (data.length > 0) {
-          const proc = data[0];
-          setIntervalDays(proc.interval_days?.toString() || '');
-          if (proc.last_completed) {
-            const iso = new Date(proc.last_completed).toISOString().split('T')[0];
+        if (data) {
+          setIntervalDays(data.interval_days?.toString() || '');
+          if (data.last_completed) {
+            const iso = new Date(data.last_completed).toISOString().split('T')[0];
             setSelectedDate(iso);
           }
         }
-      } catch (error) {
+              } catch (error) {
         console.error('Error fetching procedure:', error);
       } finally {
         setLoading(false);
@@ -72,16 +66,12 @@ const body = {
     completed_by: selectedDate ? userId : null,  // ⬅️ Only set if completed date is touched
   };
   
-      await fetch(`${SUPABASE_URL}/rest/v1/procedures?id=eq.${procedureId}`, {
-        method: 'PATCH',
-        headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_KEY}`,
-          'Content-Type': 'application/json',
-          Prefer: 'return=minimal',
-        },
-        body: JSON.stringify(body),
-      });
+  const { error } = await supabase
+  .from('procedures')
+  .update(body)
+  .eq('id', procedureId);
+
+if (error) throw error;
 
       Alert.alert('Saved', 'Procedure settings updated.');
       onClose();
