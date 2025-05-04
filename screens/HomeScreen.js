@@ -14,11 +14,14 @@ import { styles } from '../styles/globalStyles';
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_KEY } from '../utils/supaBaseConfig';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useSync } from '../contexts/SyncContext';
 
 // Initialize Supabase client
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 export default function HomeScreen({ navigation }) {
+  const { setIsSyncing } = useSync();
+
   const [machines, setMachines] = useState([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [newMachineName, setNewMachineName] = useState('');
@@ -27,23 +30,26 @@ export default function HomeScreen({ navigation }) {
   useEffect(() => {
     const fetchCompanyAndMachines = async () => {
       try {
+        setIsSyncing(true);
+        await new Promise((resolve) => setTimeout(resolve, 2000)); 
+  
         const session = await AsyncStorage.getItem('loginData');
         const parsedSession = JSON.parse(session);
         const companyId = parsedSession?.companyId;
-
+  
         if (!companyId) {
           console.error('No companyId found.');
           return;
         }
-
+  
         setCompanyId(companyId);
         console.log('Loaded companyId:', companyId);
-
+  
         const { data, error } = await supabase
           .from('machines')
           .select('*')
           .eq('company_id', companyId);
-
+  
         if (error) {
           console.error('Error fetching machines:', error.message);
         } else {
@@ -51,12 +57,15 @@ export default function HomeScreen({ navigation }) {
         }
       } catch (error) {
         console.error('Unexpected error loading machines:', error);
+      } finally {
+        setIsSyncing(false);
       }
     };
-
+  
     const unsubscribe = navigation.addListener('focus', fetchCompanyAndMachines);
     return unsubscribe;
   }, [navigation]);
+          
 
   const goToMachine = (machineId) => {
     navigation.navigate('MachineScreen', { machineId });
@@ -71,32 +80,34 @@ export default function HomeScreen({ navigation }) {
       Alert.alert('Error', 'Company ID not loaded yet.');
       return;
     }
-
+  
     console.log('Adding machine for companyId:', companyId);
-
+    setIsSyncing(true); 
+  
     try {
       const { data, error } = await supabase
         .from('machines')
         .insert([{ name: newMachineName.trim(), company_id: companyId }])
         .select();
-
+  
       if (error) {
         console.error('Supabase Insert Error:', error.message);
         Alert.alert('Error', 'Failed to add machine: ' + error.message);
         return;
       }
-
+  
       console.log('Inserted machine:', data);
-
       setMachines((prevMachines) => [...prevMachines, ...data]);
       setNewMachineName('');
       setModalVisible(false);
     } catch (error) {
       console.error('Unexpected error adding machine:', error);
       Alert.alert('Error', 'An unexpected error occurred.');
+    } finally {
+      setIsSyncing(false); 
     }
   };
-
+  
   const deleteMachine = async (id) => {
     Alert.alert(
       'Delete Machine',
@@ -152,7 +163,7 @@ export default function HomeScreen({ navigation }) {
 
       <FlatList
         data={machines}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item.id.toString()}
         renderItem={({ item }) => (
           <View style={styles.machineItem}>
             <TouchableOpacity

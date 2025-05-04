@@ -21,6 +21,7 @@ import ChecklistScreen from './screens/ChecklistScreen';
 import UploadTestScreen from './screens/UploadTestScreen';
 import GestureTestScreen from './screens/GestureTestScreen';
 import GestureSharedValueTest from './tests/GestureSharedValueTest';
+import { SyncProvider, SyncBanner } from './contexts/SyncContext';
 // Create Navigators
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -67,6 +68,7 @@ function TabNavigator() {
         name="Calendar"
         component={MasterCalendarScreen}
         options={{
+          tabBarLabel: 'Calendar',
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons name="calendar-month" color={color} size={size} />
           ),
@@ -76,6 +78,7 @@ function TabNavigator() {
         name="Checklist"
         component={ChecklistScreen}
         options={{
+          tabBarLabel: 'Checklist',
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons name="clipboard-check-outline" color={color} size={size} />
           ),
@@ -90,20 +93,26 @@ export default function App() {
 
   return (
     <AppContext.Provider value={{ loginData, setLoginData }}>
-      <SafeAreaProvider>
-        <GestureHandlerRootView style={{ flex: 1 }}>
+      <SyncProvider> {/* <-- wrap the whole app */}
+        <SafeAreaProvider>
+          <GestureHandlerRootView style={{ flex: 1 }}>
           <NavigationContainer>
-          <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Login">
-  <Stack.Screen name="Login" component={LoginScreen} />
-  <Stack.Screen name="MainTabs" component={TabNavigator} />
-  <Stack.Screen name="GestureTestScreen" component={GestureTestScreen} />
-  <Stack.Screen name="GestureSharedValueTest" component={GestureSharedValueTest} />
-
-</Stack.Navigator>
-          </NavigationContainer>
-          <StatusBar style="light" backgroundColor="#000" />
-        </GestureHandlerRootView>
-      </SafeAreaProvider>
+  {typeof children === 'string' ? (
+    <Text>{children}</Text>
+  ) : (
+    <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Login">
+      <Stack.Screen name="Login" component={LoginScreen} />
+      <Stack.Screen name="MainTabs" component={TabNavigator} />
+      <Stack.Screen name="GestureTestScreen" component={GestureTestScreen} />
+      <Stack.Screen name="GestureSharedValueTest" component={GestureSharedValueTest} />
+    </Stack.Navigator>
+  )}
+</NavigationContainer>
+            <StatusBar style="light" backgroundColor="#000" />
+            <SyncBanner /> 
+          </GestureHandlerRootView>
+        </SafeAreaProvider>
+      </SyncProvider>
     </AppContext.Provider>
   );
 }

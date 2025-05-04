@@ -178,10 +178,10 @@ export default function MachineScreen() {
       <Text style={styles.header}>{machine?.name}</Text>
 
       <FlatList
-        data={procedures.filter(p => !p.is_non_routine)}
-        keyExtractor={(item) => item.id}
-        renderItem={renderProcedure}
-      />
+  data={procedures.filter(p => !p.is_non_routine)}
+  keyExtractor={(item) => item.id.toString()}  // ← fix here
+  renderItem={renderProcedure}
+/>
 
       <TouchableOpacity style={styles.addBtn} onPress={() => setModalVisible(true)}>
         <Text style={styles.addBtnText}>+ Add Procedure</Text>

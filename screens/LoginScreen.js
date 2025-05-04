@@ -23,7 +23,7 @@ export default function LoginScreen({ navigation }) {
   const [rememberMe, setRememberMe] = useState(true); // default = true
 
   useEffect(() => {
-    // 🧠 Auto-fill stored credentials without auto-login
+  
     const checkStoredCredentials = async () => {
       try {
         const storedEmail = await SecureStore.getItemAsync('storedEmail');
