@@ -93,21 +93,17 @@ export default function App() {
 
   return (
     <AppContext.Provider value={{ loginData, setLoginData }}>
-      <SyncProvider> {/* <-- wrap the whole app */}
+      <SyncProvider>
         <SafeAreaProvider>
           <GestureHandlerRootView style={{ flex: 1 }}>
-          <NavigationContainer>
-  {typeof children === 'string' ? (
-    <Text>{children}</Text>
-  ) : (
-    <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Login">
-      <Stack.Screen name="Login" component={LoginScreen} />
-      <Stack.Screen name="MainTabs" component={TabNavigator} />
-      <Stack.Screen name="GestureTestScreen" component={GestureTestScreen} />
-      <Stack.Screen name="GestureSharedValueTest" component={GestureSharedValueTest} />
-    </Stack.Navigator>
-  )}
-</NavigationContainer>
+            <NavigationContainer>
+              <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Login">
+                <Stack.Screen name="Login" component={LoginScreen} />
+                <Stack.Screen name="MainTabs" component={TabNavigator} />
+                <Stack.Screen name="GestureTestScreen" component={GestureTestScreen} />
+                <Stack.Screen name="GestureSharedValueTest" component={GestureSharedValueTest} />
+              </Stack.Navigator>
+            </NavigationContainer>
             <StatusBar style="light" backgroundColor="#000" />
             <SyncBanner /> 
           </GestureHandlerRootView>

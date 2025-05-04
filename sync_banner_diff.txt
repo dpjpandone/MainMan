@@ -1,0 +1,284 @@
+diff --git a/App.js b/App.js
+index 3bd82f0..1193ec2 100644
+--- a/App.js
++++ b/App.js
+@@ -21,6 +21,7 @@ import ChecklistScreen from './screens/ChecklistScreen';
+ import UploadTestScreen from './screens/UploadTestScreen';
+ import GestureTestScreen from './screens/GestureTestScreen';
+ import GestureSharedValueTest from './tests/GestureSharedValueTest';
++import { SyncProvider, SyncBanner } from './contexts/SyncContext';
+ // Create Navigators
+ const Tab = createBottomTabNavigator();
+ const Stack = createNativeStackNavigator();
+@@ -67,6 +68,7 @@ function TabNavigator() {
+         name="Calendar"
+         component={MasterCalendarScreen}
+         options={{
++          tabBarLabel: 'Calendar',
+           tabBarIcon: ({ color, size }) => (
+             <MaterialCommunityIcons name="calendar-month" color={color} size={size} />
+           ),
+@@ -76,6 +78,7 @@ function TabNavigator() {
+         name="Checklist"
+         component={ChecklistScreen}
+         options={{
++          tabBarLabel: 'Checklist',
+           tabBarIcon: ({ color, size }) => (
+             <MaterialCommunityIcons name="clipboard-check-outline" color={color} size={size} />
+           ),
+@@ -90,20 +93,26 @@ export default function App() {
+ 
+   return (
+     <AppContext.Provider value={{ loginData, setLoginData }}>
+-      <SafeAreaProvider>
+-        <GestureHandlerRootView style={{ flex: 1 }}>
++      <SyncProvider> {/* <-- wrap the whole app */}
++        <SafeAreaProvider>
++          <GestureHandlerRootView style={{ flex: 1 }}>
+           <NavigationContainer>
+-          <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Login">
+-  <Stack.Screen name="Login" component={LoginScreen} />
+-  <Stack.Screen name="MainTabs" component={TabNavigator} />
+-  <Stack.Screen name="GestureTestScreen" component={GestureTestScreen} />
+-  <Stack.Screen name="GestureSharedValueTest" component={GestureSharedValueTest} />
+-
+-</Stack.Navigator>
+-          </NavigationContainer>
+-          <StatusBar style="light" backgroundColor="#000" />
+-        </GestureHandlerRootView>
+-      </SafeAreaProvider>
++  {typeof children === 'string' ? (
++    <Text>{children}</Text>
++  ) : (
++    <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Login">
++      <Stack.Screen name="Login" component={LoginScreen} />
++      <Stack.Screen name="MainTabs" component={TabNavigator} />
++      <Stack.Screen name="GestureTestScreen" component={GestureTestScreen} />
++      <Stack.Screen name="GestureSharedValueTest" component={GestureSharedValueTest} />
++    </Stack.Navigator>
++  )}
++</NavigationContainer>
++            <StatusBar style="light" backgroundColor="#000" />
++            <SyncBanner /> 
++          </GestureHandlerRootView>
++        </SafeAreaProvider>
++      </SyncProvider>
+     </AppContext.Provider>
+   );
+ }
+diff --git a/contexts/SyncContext.js b/contexts/SyncContext.js
+new file mode 100644
+index 0000000..6fddf9b
+--- /dev/null
++++ b/contexts/SyncContext.js
+@@ -0,0 +1,61 @@
++import { View, Text, StyleSheet, Platform, StatusBar } from 'react-native';
++import React, { createContext, useState, useContext, useEffect, useRef } from 'react';
++
++const SyncContext = createContext();
++
++export const SyncProvider = ({ children }) => {
++  const [isSyncing, setIsSyncing] = useState(false);
++  return (
++    <SyncContext.Provider value={{ isSyncing, setIsSyncing }}>
++      {children}
++    </SyncContext.Provider>
++  );
++};
++
++export const useSync = () => useContext(SyncContext);
++
++export function SyncBanner() {
++  const { isSyncing } = useSync();
++  const dotCount = useRef(0);
++  const [dots, setDots] = useState('');
++
++  useEffect(() => {
++    if (!isSyncing) return;
++    const interval = setInterval(() => {
++      dotCount.current = (dotCount.current + 1) % 4;
++      setDots('.'.repeat(dotCount.current));
++    }, 400);
++    return () => clearInterval(interval);
++  }, [isSyncing]);
++
++  if (!isSyncing) return null;
++
++  return (
++<View style={[styles.banner, { paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight || 24 : 0 }]}>
++<Text style={styles.syncText}>SYNC IN PROGRESS{dots}</Text>
++    </View>
++  );
++}
++
++
++const styles = StyleSheet.create({
++    banner: {
++        position: 'absolute',
++        top: 0,
++        width: '100%',
++        backgroundColor: '#000',
++        borderBottomWidth: 1,
++        borderBottomColor: '#0f0',
++        zIndex: 9999,
++        alignItems: 'center',
++        justifyContent: 'center',
++        paddingVertical: 6,
++        flexDirection: 'row',
++      },
++            syncText: {
++        color: '#0f0',
++        fontSize: 14,
++        fontFamily: 'Courier',
++        letterSpacing: 1,
++      },
++      });
+diff --git a/screens/HomeScreen.js b/screens/HomeScreen.js
+index f15458f..d6b6661 100644
+--- a/screens/HomeScreen.js
++++ b/screens/HomeScreen.js
+@@ -14,11 +14,14 @@ import { styles } from '../styles/globalStyles';
+ import { createClient } from '@supabase/supabase-js';
+ import { SUPABASE_URL, SUPABASE_KEY } from '../utils/supaBaseConfig';
+ import { MaterialCommunityIcons } from '@expo/vector-icons';
++import { useSync } from '../contexts/SyncContext';
+ 
+ // Initialize Supabase client
+ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+ 
+ export default function HomeScreen({ navigation }) {
++  const { setIsSyncing } = useSync();
++
+   const [machines, setMachines] = useState([]);
+   const [modalVisible, setModalVisible] = useState(false);
+   const [newMachineName, setNewMachineName] = useState('');
+@@ -27,23 +30,26 @@ export default function HomeScreen({ navigation }) {
+   useEffect(() => {
+     const fetchCompanyAndMachines = async () => {
+       try {
++        setIsSyncing(true);
++        await new Promise((resolve) => setTimeout(resolve, 2000)); 
++  
+         const session = await AsyncStorage.getItem('loginData');
+         const parsedSession = JSON.parse(session);
+         const companyId = parsedSession?.companyId;
+-
++  
+         if (!companyId) {
+           console.error('No companyId found.');
+           return;
+         }
+-
++  
+         setCompanyId(companyId);
+         console.log('Loaded companyId:', companyId);
+-
++  
+         const { data, error } = await supabase
+           .from('machines')
+           .select('*')
+           .eq('company_id', companyId);
+-
++  
+         if (error) {
+           console.error('Error fetching machines:', error.message);
+         } else {
+@@ -51,12 +57,15 @@ export default function HomeScreen({ navigation }) {
+         }
+       } catch (error) {
+         console.error('Unexpected error loading machines:', error);
++      } finally {
++        setIsSyncing(false);
+       }
+     };
+-
++  
+     const unsubscribe = navigation.addListener('focus', fetchCompanyAndMachines);
+     return unsubscribe;
+   }, [navigation]);
++          
+ 
+   const goToMachine = (machineId) => {
+     navigation.navigate('MachineScreen', { machineId });
+@@ -71,32 +80,34 @@ export default function HomeScreen({ navigation }) {
+       Alert.alert('Error', 'Company ID not loaded yet.');
+       return;
+     }
+-
++  
+     console.log('Adding machine for companyId:', companyId);
+-
++    setIsSyncing(true); 
++  
+     try {
+       const { data, error } = await supabase
+         .from('machines')
+         .insert([{ name: newMachineName.trim(), company_id: companyId }])
+         .select();
+-
++  
+       if (error) {
+         console.error('Supabase Insert Error:', error.message);
+         Alert.alert('Error', 'Failed to add machine: ' + error.message);
+         return;
+       }
+-
++  
+       console.log('Inserted machine:', data);
+-
+       setMachines((prevMachines) => [...prevMachines, ...data]);
+       setNewMachineName('');
+       setModalVisible(false);
+     } catch (error) {
+       console.error('Unexpected error adding machine:', error);
+       Alert.alert('Error', 'An unexpected error occurred.');
++    } finally {
++      setIsSyncing(false); 
+     }
+   };
+-
++  
+   const deleteMachine = async (id) => {
+     Alert.alert(
+       'Delete Machine',
+@@ -152,7 +163,7 @@ export default function HomeScreen({ navigation }) {
+ 
+       <FlatList
+         data={machines}
+-        keyExtractor={(item) => item.id}
++        keyExtractor={(item) => item.id.toString()}
+         renderItem={({ item }) => (
+           <View style={styles.machineItem}>
+             <TouchableOpacity
+diff --git a/screens/LoginScreen.js b/screens/LoginScreen.js
+index 8e47cf0..6d3a092 100644
+--- a/screens/LoginScreen.js
++++ b/screens/LoginScreen.js
+@@ -23,7 +23,7 @@ export default function LoginScreen({ navigation }) {
+   const [rememberMe, setRememberMe] = useState(true); // default = true
+ 
+   useEffect(() => {
+-    // 🧠 Auto-fill stored credentials without auto-login
++  
+     const checkStoredCredentials = async () => {
+       try {
+         const storedEmail = await SecureStore.getItemAsync('storedEmail');
+diff --git a/screens/MachineScreen.js b/screens/MachineScreen.js
+index 574ffb0..93146c3 100644
+--- a/screens/MachineScreen.js
++++ b/screens/MachineScreen.js
+@@ -178,10 +178,10 @@ export default function MachineScreen() {
+       <Text style={styles.header}>{machine?.name}</Text>
+ 
+       <FlatList
+-        data={procedures.filter(p => !p.is_non_routine)}
+-        keyExtractor={(item) => item.id}
+-        renderItem={renderProcedure}
+-      />
++  data={procedures.filter(p => !p.is_non_routine)}
++  keyExtractor={(item) => item.id.toString()}  // ← fix here
++  renderItem={renderProcedure}
++/>
+ 
+       <TouchableOpacity style={styles.addBtn} onPress={() => setModalVisible(true)}>
+         <Text style={styles.addBtnText}>+ Add Procedure</Text>
