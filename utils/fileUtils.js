@@ -8,6 +8,7 @@ import { Modal, View, Text, TextInput, TouchableOpacity, Image } from 'react-nat
 import { styles } from '../styles/globalStyles';
 import * as Linking from 'expo-linking';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { wrapWithSync } from './SyncManager';
 
 export function FileLabelPrompt({ visible, onSubmit, onCancel }) {
     const [label, setLabel] = useState('');
@@ -58,95 +59,96 @@ export function FileLabelPrompt({ visible, onSubmit, onCancel }) {
     label,
   }) {
     try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: 'application/pdf',
-        copyToCacheDirectory: true,
-        multiple: false,
-      });
-  
-      if (!result.canceled && result.assets?.length > 0) {
-        const file = result.assets[0];
-        const uri = file.uri;
-  
-        const sanitizedLabel = label?.trim().replace(/[^a-z0-9_\-]/gi, '_') || 'Untitled';
-        const fileName = `${sanitizedLabel}-${procedureId}-${Date.now()}.pdf`;
-        const uploadUrl = `${SUPABASE_URL}/storage/v1/object/${SUPABASE_BUCKET}/${fileName}`;
-  
-        const uploadResponse = await FileSystem.uploadAsync(uploadUrl, uri, {
-          httpMethod: 'PUT',
-          headers: {
-            'Authorization': `Bearer ${SUPABASE_KEY}`,
-            'Content-Type': 'application/pdf',
-            'x-upsert': 'true',
-          },
-          uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+      await wrapWithSync('uploadProcedureFile', async () => {
+        const result = await DocumentPicker.getDocumentAsync({
+          type: 'application/pdf',
+          copyToCacheDirectory: true,
+          multiple: false,
         });
   
-        if (uploadResponse.status !== 200) {
-          console.error('Upload failed:', uploadResponse);
-          alert(`Upload failed: ${uploadResponse.status}`);
-          return;
+        if (!result.canceled && result.assets?.length > 0) {
+          const file = result.assets[0];
+          const uri = file.uri;
+  
+          const sanitizedLabel = label?.trim().replace(/[^a-z0-9_\-]/gi, '_') || 'Untitled';
+          const fileName = `${sanitizedLabel}-${procedureId}-${Date.now()}.pdf`;
+          const uploadUrl = `${SUPABASE_URL}/storage/v1/object/${SUPABASE_BUCKET}/${fileName}`;
+  
+          const uploadResponse = await FileSystem.uploadAsync(uploadUrl, uri, {
+            httpMethod: 'PUT',
+            headers: {
+              'Authorization': `Bearer ${SUPABASE_KEY}`,
+              'Content-Type': 'application/pdf',
+              'x-upsert': 'true',
+            },
+            uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+          });
+  
+          if (uploadResponse.status !== 200) {
+            console.error('Upload failed:', uploadResponse);
+            alert(`Upload failed: ${uploadResponse.status}`);
+            return;
+          }
+  
+          const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_BUCKET}/${fileName}`;
+          const updatedUrls = [...(fileUrls || []), publicUrl];
+          const updatedLabels = [...(fileLabels || []), sanitizedLabel];
+  
+          setFileUrls(updatedUrls);
+          setFileLabels(updatedLabels);
+  
+          const { error: patchError } = await supabase
+            .from('procedures')
+            .update({
+              file_urls: updatedUrls,
+              file_labels: updatedLabels,
+            })
+            .eq('id', procedureId);
+  
+          if (patchError) {
+            console.error('Update error:', patchError.message);
+            alert(`Failed to save file info: ${patchError.message}`);
+            return;
+          }
+  
+          setTimeout(() => {
+            if (scrollToEnd) scrollToEnd();
+          }, 300);
         }
-  
-        const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_BUCKET}/${fileName}`;
-        const updatedUrls = [...(fileUrls || []), publicUrl];
-        const updatedLabels = [...(fileLabels || []), sanitizedLabel];
-  
-        setFileUrls(updatedUrls);
-        setFileLabels(updatedLabels);
-  
-        const { error: patchError } = await supabase
-          .from('procedures')
-          .update({
-            file_urls: updatedUrls,
-            file_labels: updatedLabels,
-          })
-          .eq('id', procedureId);
-  
-        if (patchError) {
-          console.error('Update error:', patchError.message);
-          alert(`Failed to save file info: ${patchError.message}`);
-          return;
-        }
-  
-        setTimeout(() => {
-          if (scrollToEnd) scrollToEnd();
-        }, 300);
-      }
+      });
     } catch (err) {
       console.error('File upload error:', err);
       alert('Upload failed: ' + err.message);
     }
   }
-          
-  export async function deleteProcedureFile({
-    uriToDelete,
-    fileUrls,
-    setFileUrls,
-    fileLabels,
-    setFileLabels,
-    procedureId,
-    refreshMachine,
-  }) {
-    try {
+
+
+export async function deleteProcedureFile({
+  uriToDelete,
+  fileUrls,
+  setFileUrls,
+  fileLabels,
+  setFileLabels,
+  procedureId,
+  refreshMachine,
+}) {
+  try {
+    await wrapWithSync('deleteProcedureFile', async () => {
       const fileName = uriToDelete.split('/').pop();
-  
+
       const { error: storageError } = await supabase
         .storage
         .from(SUPABASE_BUCKET)
         .remove([fileName]);
-  
-      if (storageError) {
-        console.error('Supabase storage delete error:', storageError.message);
-        return;
-      }
-  
+
+      if (storageError) throw storageError;
+
       const updatedUrls = fileUrls.filter((uri) => uri !== uriToDelete);
       const updatedLabels = fileLabels.filter((_, i) => fileUrls[i] !== uriToDelete);
-  
+
       setFileUrls(updatedUrls);
       setFileLabels(updatedLabels);
-  
+
       const { error: dbError } = await supabase
         .from('procedures')
         .update({
@@ -154,17 +156,15 @@ export function FileLabelPrompt({ visible, onSubmit, onCancel }) {
           file_labels: updatedLabels,
         })
         .eq('id', procedureId);
-  
-      if (dbError) {
-        console.error('Supabase DB update error:', dbError.message);
-        return;
-      }
-  
+
+      if (dbError) throw dbError;
+
       if (refreshMachine) refreshMachine();
-    } catch (error) {
-      console.error('Failed to delete file:', error);
-    }
+    });
+  } catch (error) {
+    console.error('Failed to delete file:', error);
   }
+}
           
 
 export function AttachmentGridViewer({

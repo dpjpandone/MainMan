@@ -5,6 +5,8 @@ import { View, Text, TouchableOpacity, Modal, Alert, ScrollView, TextInput, Stat
 import { styles } from '../styles/globalStyles';
 import { FullscreenImageViewerController, deleteProcedureImage, uploadProcedureImage } from '../utils/imageUtils';
 import { supabase, SUPABASE_BUCKET } from '../utils/supaBaseConfig';
+import { wrapWithSync } from '../utils/SyncManager';
+import { SyncWarning } from '../contexts/SyncContext';
 import { InteractionManager } from 'react-native';
 import { uploadProcedureFile, deleteProcedureFile, AttachmentGridViewer, FileLabelPrompt } from '../utils/fileUtils';
 import * as Linking from 'expo-linking';
@@ -64,7 +66,7 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
     
   useEffect(() => {
     const fetchFreshStatus = async () => {
-      try {
+      await wrapWithSync('fetchProcedureStatus', async () => {
         const { data, error } = await supabase
           .from('procedures')
           .select('last_completed, interval_days')
@@ -81,19 +83,17 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
           Math.floor((Date.now() - newLastCompleted) / 86400000) > newInterval;
   
         setBgColor(overdue ? '#e4001e' : '#003300');
-      } catch (err) {
-        console.error('[CARD] Failed to fetch updated status:', err);
-      }
+      });
     };
   
     fetchFreshStatus();
   }, [item.id]);
-  
+    
   useEffect(() => {
     const fetchInitials = async () => {
       if (!item.completed_by) return;
   
-      try {
+      await wrapWithSync('fetchInitials', async () => {
         const { data, error } = await supabase
           .from('profiles')
           .select('initials')
@@ -102,14 +102,12 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
   
         if (error) throw error;
         if (data?.initials) setInitials(data.initials);
-      } catch (error) {
-        console.error('[CARD] Error fetching initials:', error);
-      }
+      });
     };
   
     fetchInitials();
   }, [item.completed_by]);
-    
+      
 
   useEffect(() => {
     const showSubscription = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
@@ -143,35 +141,34 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
   //section 2 Functions  
   
   const openModal = async () => {
+    setModalVisible(true); // Show modal immediately — allows warning display
+  
     try {
-      const { data, error } = await supabase
-      .from('procedures')
-      .select('description, image_urls, file_urls, file_labels')
-      .eq('id', item.id)
-      .single();
-    
-    console.log('[MODAL] Fetching latest procedure:', item.id);
-    console.log('[MODAL] Supabase GET response:', data);
-    
-    if (error || !data) {
-      console.error('Procedure not found or error:', error);
-      return;
-    }
-    
-    setDescription(data.description || '');
-    setImageUrls(data.image_urls || []);
-    setFileUrls(data.file_urls || []);
-    setFileLabels(data.file_labels || []);
-      
+      await wrapWithSync('loadProcedureDetails', async () => {
+        const { data, error } = await supabase
+          .from('procedures')
+          .select('description, image_urls, file_urls, file_labels')
+          .eq('id', item.id)
+          .single();
+  
+        if (error || !data) {
+          console.error('Procedure not found or error:', error);
+          return;
+        }
+  
+        setDescription(data.description || '');
+        setImageUrls(data.image_urls || []);
+        setFileUrls(data.file_urls || []);
+        setFileLabels(data.file_labels || []);
+      });
+  
       setEditMode(false);
       setImageEditMode(false);
-      setModalVisible(true);
     } catch (error) {
       console.error('Error loading latest procedure:', error);
     }
   };
-            
-  
+        
   const handleDeleteImage = (uri) => {
     deleteProcedureImage({
       uriToDelete: uri,
@@ -186,55 +183,57 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
     
   const saveDescription = async () => {
     try {
-      const { error } = await supabase
-      .from('procedures')
-      .update({
-        description,
-        image_urls: imageUrls,
-        file_urls: fileUrls,
-        file_labels: fileLabels,
-      })
-      .eq('id', item.id);
-    
-    if (error) throw error;
-      
-      setEditMode(false);       
-      setImageEditMode(false);
+      await wrapWithSync('saveProcedureDescription', async () => {
+        const { error } = await supabase
+          .from('procedures')
+          .update({
+            description,
+            image_urls: imageUrls,
+            file_urls: fileUrls,
+            file_labels: fileLabels,
+          })
+          .eq('id', item.id);
+  
+        if (error) throw error;
+  
+        setEditMode(false);
+        setImageEditMode(false);
+      });
     } catch (error) {
       console.error('Failed to save description:', error);
     }
   };
-  
+      
   const handleBack = async () => {
     if (editMode) {
       try {
-        const { data, error } = await supabase
-        .from('procedures')
-        .select('description, image_urls, file_urls, file_labels')
-        .eq('id', item.id)
-        .single();
-      
-      if (error || !data) {
-        console.error('Error restoring procedure state:', error);
-        return;
-      }
-      
-      setEditMode(false);
-      setImageEditMode(false);
-      setDescription(data.description || '');
-      setImageUrls(data.image_urls || []);
-      setFileUrls(data.file_urls || []);
-      setFileLabels(data.file_labels || []);
-            } catch (error) {
+        await wrapWithSync('restoreProcedureState', async () => {
+          const { data, error } = await supabase
+            .from('procedures')
+            .select('description, image_urls, file_urls, file_labels')
+            .eq('id', item.id)
+            .single();
+  
+          if (error || !data) throw error;
+  
+          setEditMode(false);
+          setImageEditMode(false);
+          setDescription(data.description || '');
+          setImageUrls(data.image_urls || []);
+          setFileUrls(data.file_urls || []);
+          setFileLabels(data.file_labels || []);
+        });
+      } catch (error) {
         console.error('Error restoring state on back:', error);
       }
     } else {
       setModalVisible(false);
       if (typeof refreshMachine === 'function') {
-        refreshMachine(); 
+        refreshMachine();
       }
     }
-  };          
+  };
+  
   const handleImagePick = async () => {
     await uploadProcedureImage({
       procedureId: item.id,
@@ -266,13 +265,15 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
                 }
 
                 // Delete procedure record from Supabase
-                const { error } = await supabase
-                .from('procedures')
-                .delete()
-                .eq('id', item.id);
-              
-              if (error) throw error;
-              
+                await wrapWithSync('deleteProcedure', async () => {
+                  const { error } = await supabase
+                    .from('procedures')
+                    .delete()
+                    .eq('id', item.id);
+                
+                  if (error) throw error;
+                });
+                              
                 onDelete(item.id);  // Notify parent to refresh
                 setModalVisible(false);
               } catch (error) {
@@ -323,10 +324,11 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
   </TouchableOpacity>
 </View>
 
-      {/* Section 3: Fullscreen Modal */}
-      <Modal visible={modalVisible} transparent={false} animationType="fade">
-      <View style={styles.modalOverlay}>
-  <StatusBar backgroundColor="#000" barStyle="light-content" />
+    
+<Modal visible={modalVisible} transparent={false} animationType="fade">
+  <View style={styles.modalOverlay}>
+    <StatusBar backgroundColor="#000" barStyle="light-content" />
+    <SyncWarning />
 
   {editMode && !keyboardVisible && (
   <>
@@ -468,14 +470,16 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
   visible={labelPromptVisible}
   onSubmit={(label) => {
     setLabelPromptVisible(false);
-    uploadProcedureFile({
-      procedureId: item.id,
-      fileUrls,
-      setFileUrls,
-      scrollToEnd: scrollToGalleryEnd,
-      fileLabels,
-      setFileLabels,
-      label,
+    wrapWithSync('uploadProcedureFile', async () => {
+      await uploadProcedureFile({
+        procedureId: item.id,
+        fileUrls,
+        setFileUrls,
+        scrollToEnd: scrollToGalleryEnd,
+        fileLabels,
+        setFileLabels,
+        label,
+      });
     });
   }}
   onCancel={() => setLabelPromptVisible(false)}

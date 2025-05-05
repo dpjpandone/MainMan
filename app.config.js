@@ -4,29 +4,29 @@ export default {
     slug: "evatech-reboot",
     version: "1.0.0",
     orientation: "portrait",
-    // icon: "./assets/icon.png",
+     icon: "./assets/icon.png",
     userInterfaceStyle: "light",
     newArchEnabled: true,
     experimental: {
       bridgeless: false,
     },
-    // splash: {
-    //   image: "./assets/splash-icon.png",
-    //   resizeMode: "cover",
-    //   backgroundColor: "#000000",
-    // },
+     splash: {
+       image: "./assets/splash-icon.png",
+       resizeMode: "cover",
+       backgroundColor: "#000000",
+     },
     ios: {
       supportsTablet: true,
     },
     android: {
-      // adaptiveIcon: {
-      //   foregroundImage: "./assets/adaptive-icon.png",
-      //   backgroundColor: "#000000",
-      // },
+       adaptiveIcon: {
+         foregroundImage: "./assets/adaptive-icon.png",
+         backgroundColor: "#000000",
+       },
       package: "com.evatech.maintenance",
     },
     web: {
-      // favicon: "./assets/favicon.png",
+       favicon: "./assets/favicon.png",
     },
     extra: {
       eas: {

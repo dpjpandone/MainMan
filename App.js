@@ -6,7 +6,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Text } from 'react-native';
+import { Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -101,11 +101,17 @@ export default function App() {
                 <Stack.Screen name="MainTabs" component={TabNavigator} />
               </Stack.Navigator>
             </NavigationContainer>
+  
             <StatusBar style="light" backgroundColor="#000" />
-            <SyncBanner />
+  
+            {/* 🔥 Floating SyncBanner stays on top of everything */}
+            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 9999 }}>
+              <SyncBanner />
+            </View>
+  
           </GestureHandlerRootView>
         </SafeAreaProvider>
       </SyncProvider>
     </AppContext.Provider>
   );
-}
+  }

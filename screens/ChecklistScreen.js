@@ -7,6 +7,7 @@ import { styles } from '../styles/globalStyles';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from '../utils/supaBaseConfig';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { wrapWithSync } from '../utils/SyncManager';
 
 // Initialize Supabase client
 
@@ -17,63 +18,63 @@ export default function ChecklistScreen() {
 
   const fetchProcedures = async () => {
     try {
-      const session = await AsyncStorage.getItem('loginData');
-      const parsedSession = JSON.parse(session);
-      const companyId = parsedSession?.companyId;
-
-      if (!companyId) return;
-
-      const { data, error } = await supabase
-        .from('procedures')
-        .select('id, procedure_name, interval_days, last_completed, due_date, machine_id, machines(name)')
-        .eq('company_id', companyId);
-
-      if (error) {
-        console.error('Error fetching procedures:', error.message);
-        return;
-      }
-
-      const now = new Date();
-      const pastDue = [];
-      const dueSoon = [];
-
-      data.forEach((proc) => {
-        const lastCompleted = proc.last_completed ? new Date(proc.last_completed) : null;
-        const intervalDays = proc.interval_days;
-        const machineName = proc.machines?.name || 'Unknown Machine';
-        const item = { ...proc, machineName };
-
-        if (!lastCompleted) {
-          pastDue.push(item);
-        } else {
-          const diff = Math.floor((now - lastCompleted) / (1000 * 60 * 60 * 24));
-          const daysLeft = intervalDays - diff;
-          if (diff > intervalDays) {
+      await wrapWithSync('fetchChecklist', async () => {
+        const session = await AsyncStorage.getItem('loginData');
+        const parsedSession = JSON.parse(session);
+        const companyId = parsedSession?.companyId;
+  
+        if (!companyId) return;
+  
+        const { data, error } = await supabase
+          .from('procedures')
+          .select('id, procedure_name, interval_days, last_completed, due_date, machine_id, machines(name)')
+          .eq('company_id', companyId);
+  
+        if (error) throw error;
+  
+        const now = new Date();
+        const pastDue = [];
+        const dueSoon = [];
+  
+        data.forEach((proc) => {
+          const lastCompleted = proc.last_completed ? new Date(proc.last_completed) : null;
+          const intervalDays = proc.interval_days;
+          const machineName = proc.machines?.name || 'Unknown Machine';
+          const item = { ...proc, machineName };
+  
+          if (!lastCompleted) {
             pastDue.push(item);
-          } else if (daysLeft < 7) {
-            dueSoon.push(item);
+          } else {
+            const diff = Math.floor((now - lastCompleted) / (1000 * 60 * 60 * 24));
+            const daysLeft = intervalDays - diff;
+            if (diff > intervalDays) {
+              pastDue.push(item);
+            } else if (daysLeft < 7) {
+              dueSoon.push(item);
+            }
           }
-        }
+        });
+  
+        pastDue.sort((a, b) => {
+          const aDaysLate = Math.floor((now - new Date(a.last_completed)) / (1000 * 60 * 60 * 24)) - a.interval_days;
+          const bDaysLate = Math.floor((now - new Date(b.last_completed)) / (1000 * 60 * 60 * 24)) - b.interval_days;
+          return bDaysLate - aDaysLate;
+        });
+  
+        dueSoon.sort((a, b) => {
+          const aDaysLeft = a.interval_days - Math.floor((now - new Date(a.last_completed)) / (1000 * 60 * 60 * 24));
+          const bDaysLeft = b.interval_days - Math.floor((now - new Date(b.last_completed)) / (1000 * 60 * 60 * 24));
+          return aDaysLeft - bDaysLeft;
+        });
+  
+        setPastDueProcedures(pastDue);
+        setDueSoonProcedures(dueSoon);
       });
-      pastDue.sort((a, b) => {
-        const aDaysLate = Math.floor((now - new Date(a.last_completed)) / (1000 * 60 * 60 * 24)) - a.interval_days;
-        const bDaysLate = Math.floor((now - new Date(b.last_completed)) / (1000 * 60 * 60 * 24)) - b.interval_days;
-        return bDaysLate - aDaysLate; // most overdue first
-      });
-      
-      dueSoon.sort((a, b) => {
-        const aDaysLeft = a.interval_days - Math.floor((now - new Date(a.last_completed)) / (1000 * 60 * 60 * 24));
-        const bDaysLeft = b.interval_days - Math.floor((now - new Date(b.last_completed)) / (1000 * 60 * 60 * 24));
-        return aDaysLeft - bDaysLeft; // due sooner first
-      });
-      
-      setPastDueProcedures(pastDue);
-      setDueSoonProcedures(dueSoon);
     } catch (error) {
       console.error('Unexpected error fetching procedures:', error);
     }
   };
-
+  
   useFocusEffect(
     useCallback(() => {
       fetchProcedures();
@@ -81,20 +82,23 @@ export default function ChecklistScreen() {
   );
 
   return (
-    <ScrollView style={styles.container}>
-<Text style={{ color: '#fff', textAlign: 'center', marginTop: 20 }}>
-  {`${pastDueProcedures.length} Past Due / ${dueSoonProcedures.length} Due Soon`}
-</Text>
-
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={{ paddingTop: 40 }}
+    >
+      <Text style={{ color: '#fff', textAlign: 'center', marginBottom: 10 }}>
+        {`${pastDueProcedures.length} Past Due / ${dueSoonProcedures.length} Due Soon`}
+      </Text>
+  
       {pastDueProcedures.length > 0 && (
         <>
-<Text style={[styles.header, { color: '#f00' }]}>Past Due Procedures</Text>
-{pastDueProcedures.map((item) => (
+          <Text style={[styles.header, { color: '#f00' }]}>Past Due Procedures</Text>
+          {pastDueProcedures.map((item) => (
             <ProcedureCard key={item.id} item={item} navigation={navigation} isPastDue />
           ))}
         </>
       )}
-
+  
       {dueSoonProcedures.length > 0 && (
         <View style={{ marginTop: 30 }}>
           <Text style={styles.dueSoonHeader}>Due Soon:</Text>
@@ -105,8 +109,7 @@ export default function ChecklistScreen() {
       )}
     </ScrollView>
   );
-}
-
+}  
 function ProcedureCard({ item, navigation, isPastDue: initialPastDue = false }) {
   const [textColor, setTextColor] = useState('#f00');
   const now = new Date();

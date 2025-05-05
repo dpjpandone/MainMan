@@ -9,6 +9,7 @@ import { supabase } from '../utils/supaBaseConfig';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 import { Calendar } from 'react-native-calendars';
+import { wrapWithSync } from '../utils/SyncManager';
 
 export default function MachineScreen() {
   const route = useRoute();
@@ -30,38 +31,51 @@ export default function MachineScreen() {
   );
       
   const loadMachineAndProcedures = async () => {
-    try {
+    await wrapWithSync('loadMachineAndProcedures', async () => {
       const { data: machineData, error: machineError } = await supabase
         .from('machines')
         .select('*')
         .eq('id', machineId)
         .single();
   
-      if (machineError || !machineData) {
-        console.error('Machine fetch error:', machineError);
-        return;
-      }
+      if (machineError) throw machineError;
   
-      const { data: procedureData, error: procedureError } = await supabase
+      const { data: proceduresData, error: proceduresError } = await supabase
         .from('procedures')
         .select('*')
         .eq('machine_id', machineId)
-        .order('last_completed', { ascending: false, nullsFirst: true });
+        .order('due_date', { ascending: true });
   
-      if (procedureError) {
-        console.error('Procedure fetch error:', procedureError);
-        return;
-      }
+      if (proceduresError) throw proceduresError;
   
       setMachine(machineData);
-      setProcedures(procedureData || []);
-    } catch (error) {
-      console.error('Error loading machine and procedures:', error);
-    }
+      setProcedures(proceduresData);
+    });
   };
   
+  const deleteProcedure = async (procId) => {
+    await wrapWithSync('deleteProcedure', async () => {
+      try {
+        const { error } = await supabase
+          .from('procedures')
+          .delete()
+          .eq('id', procId);
+  
+        if (error) {
+          console.error('Supabase delete error:', error.message);
+          return;
+        }
+  
+        loadMachineAndProcedures();
+      } catch (error) {
+        console.error('Failed to delete procedure:', error);
+      }
+    });
+  };
+
+  
   const markComplete = async (proc) => {
-    try {
+    await wrapWithSync('markComplete', async () => {
       const now = new Date();
       const dueDate = new Date();
       dueDate.setDate(now.getDate() + parseInt(proc.interval_days || 0));
@@ -84,71 +98,55 @@ export default function MachineScreen() {
       }
   
       loadMachineAndProcedures();
-    } catch (error) {
-      console.error('Failed to mark procedure complete:', error);
-    }
+    });
+  };
+        
+  
+  const addProcedure = async () => {
+    if (!name.trim() || !interval) return;
+  
+    // 👇 Close modal first to allow SyncBanner to render
+    setModalVisible(false);
+  
+    await wrapWithSync('addProcedure', async () => {
+      try {
+        const session = await AsyncStorage.getItem('loginData');
+        const parsedSession = JSON.parse(session);
+        const companyId = parsedSession?.companyId;
+  
+        if (!companyId) {
+          console.error('No companyId found for adding procedure.');
+          return;
+        }
+  
+        const { error } = await supabase
+          .from('procedures')
+          .insert([{
+            machine_id: machineId,
+            procedure_name: name.trim(),
+            description,
+            interval_days: parseInt(interval),
+            last_completed: startingDate.toISOString(),
+            due_date: null,
+            image_urls: [],
+            company_id: companyId,
+          }]);
+  
+        if (error) {
+          console.error('Supabase insert error:', error.message);
+          return;
+        }
+  
+        setName('');
+        setInterval('');
+        setDescription('');
+        loadMachineAndProcedures();
+      } catch (error) {
+        console.error('Failed to add procedure:', error);
+      }
+    });
   };
       
-  const deleteProcedure = async (procId) => {
-    try {
-      const { error } = await supabase
-        .from('procedures')
-        .delete()
-        .eq('id', procId);
-  
-      if (error) {
-        console.error('Supabase delete error:', error.message);
-        return;
-      }
-  
-      loadMachineAndProcedures();
-    } catch (error) {
-      console.error('Failed to delete procedure:', error);
-    }
-  };
-  
- const addProcedure = async () => {
-  if (!name.trim() || !interval) return;
-
-  try {
-    const session = await AsyncStorage.getItem('loginData');
-    const parsedSession = JSON.parse(session);
-    const companyId = parsedSession?.companyId;
-
-    if (!companyId) {
-      console.error('No companyId found for adding procedure.');
-      return;
-    }
-
-    const { error } = await supabase
-      .from('procedures')
-      .insert([{
-        machine_id: machineId,
-        procedure_name: name.trim(),
-        description,
-        interval_days: parseInt(interval),
-        last_completed: startingDate.toISOString(),
-        due_date: null,
-        image_urls: [],
-        company_id: companyId,
-      }]);
-
-    if (error) {
-      console.error('Supabase insert error:', error.message);
-      return;
-    }
-
-    setModalVisible(false);
-    setName('');
-    setInterval('');
-    setDescription('');
-    loadMachineAndProcedures();
-
-  } catch (error) {
-    console.error('Failed to add procedure:', error);
-  }
-};
-  
   const renderProcedure = ({ item }) => (
     <ProcedureCard
       item={{ ...item, machineId }}

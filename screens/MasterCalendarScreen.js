@@ -14,6 +14,7 @@ import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { styles } from '../styles/globalStyles';
 import { supabase } from '../utils/supaBaseConfig';
+import { wrapWithSync } from '../utils/SyncManager';
 
 export default function MasterCalendarScreen() {
   const [selectedDate, setSelectedDate] = useState(null);
@@ -30,55 +31,50 @@ export default function MasterCalendarScreen() {
   const loadNonRoutineProcedures = async (companyId) => {
     console.log('Loading non-routine procedures for companyId:', companyId);
     try {
-      const { data, error } = await supabase
-        .from('non_routine_procedures')
-        .select('*')
-        .eq('company_id', companyId)
-        .order('due_date', { ascending: true });
+      await wrapWithSync('loadNonRoutineProcedures', async () => {
+        const { data, error } = await supabase
+          .from('non_routine_procedures')
+          .select('*')
+          .eq('company_id', companyId)
+          .order('due_date', { ascending: true });
   
-      if (error) throw error;
+        if (error) throw error;
   
-      const now = new Date();
-      const marks = {};
-      const enriched = data.map((proc) => {
-        const due = new Date(proc.due_date);
-        const isoDate = due.toISOString().split('T')[0];
-        const diffDays = Math.floor((due - now) / (1000 * 60 * 60 * 24));
+        const now = new Date();
+        const marks = {};
+        const enriched = data.map((proc) => {
+          const due = new Date(proc.due_date);
+          const isoDate = due.toISOString().split('T')[0];
+          const diffDays = Math.floor((due - now) / (1000 * 60 * 60 * 24));
   
-        let color = 'blue';
-        let status = `Due in ${diffDays} days`;
-        if (diffDays < 0) {
-          color = 'red';
-          status = 'Past Due';
-        } else if (diffDays < 30) {
-          color = 'orange';
-        }
+          let color = 'blue';
+          let status = `Due in ${diffDays} days`;
+          if (diffDays < 0) {
+            color = 'red';
+            status = 'Past Due';
+          } else if (diffDays < 30) {
+            color = 'orange';
+          }
   
-        // ✅ Add calendar dot
-        marks[isoDate] = {
-          selected: true,
-          selectedColor: color,
-        };
-          
-        return { ...proc, dueDate: due, color, status };
+          marks[isoDate] = {
+            selected: true,
+            selectedColor: color,
+          };
+  
+          return { ...proc, dueDate: due, color, status };
+        });
+  
+        setMarkedDates(marks);
+        setNonRoutineProcedures(enriched);
       });
-  
-      setMarkedDates(marks);
-      setNonRoutineProcedures(enriched);
     } catch (error) {
       console.error('Error fetching non-routine procedures:', error);
     }
   };
-      
+        
   const scheduleProcedure = async () => {
     console.log('--- Schedule Button Pressed ---');
-    console.log('companyId:', companyId);
-    console.log('selectedDate:', selectedDate);
-    console.log('machineName:', machineName);
-    console.log('procedureName:', procedureName);
-  
     if (!selectedDate || !machineName.trim() || !procedureName.trim() || !companyId) {
-      console.warn('Missing fields. Aborting scheduling.');
       Alert.alert('Missing Info', 'Please complete all fields including company ID.');
       return;
     }
@@ -92,15 +88,13 @@ export default function MasterCalendarScreen() {
     };
   
     try {
-      const { error } = await supabase
-        .from('non_routine_procedures')
-        .insert([payload]);
+      await wrapWithSync('scheduleProcedure', async () => {
+        const { error } = await supabase
+          .from('non_routine_procedures')
+          .insert([payload]);
   
-      if (error) {
-        console.error('Insert failed:', error.message);
-        Alert.alert('Insert Error', error.message);
-        return;
-      }
+        if (error) throw error;
+      });
   
       console.log('Non-routine procedure inserted successfully');
       setModalVisible(false);
@@ -113,7 +107,7 @@ export default function MasterCalendarScreen() {
       Alert.alert('Error', 'Something went wrong during scheduling.');
     }
   };
-  
+    
   const deleteNonRoutineProcedure = async (id) => {
     Alert.alert(
       'Delete Procedure',
@@ -125,17 +119,15 @@ export default function MasterCalendarScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              const { error } = await supabase
-                .from('non_routine_procedures')
-                .delete()
-                .eq('id', id)
-                .eq('company_id', companyId);
+              await wrapWithSync('deleteNonRoutineProcedure', async () => {
+                const { error } = await supabase
+                  .from('non_routine_procedures')
+                  .delete()
+                  .eq('id', id)
+                  .eq('company_id', companyId);
   
-              if (error) {
-                console.error('Delete failed:', error.message);
-                Alert.alert('Delete Error', error.message);
-                return;
-              }
+                if (error) throw error;
+              });
   
               console.log('Procedure deleted successfully');
               loadNonRoutineProcedures(companyId);
@@ -148,7 +140,7 @@ export default function MasterCalendarScreen() {
       ]
     );
   };
-      
+        
   useEffect(() => {
     const init = async () => {
       console.log('Initializing MasterCalendarScreen...');
@@ -179,28 +171,28 @@ export default function MasterCalendarScreen() {
   }, [navigation, companyId]);
 
   return (
-    <View style={styles.container}>
-      <View style={styles.calendarContainer}>
-      <Calendar
-  markingType="simple"
-  markedDates={markedDates} // <-- here
-  onDayPress={(day) => {
-    console.log('Date selected:', day.dateString);
-    setSelectedDate(day.dateString);
-    setModalVisible(true);
-  }}
-  theme={{
-    backgroundColor: '#000',
-    calendarBackground: '#000',
-    textSectionTitleColor: '#0f0',
-    dayTextColor: '#fff',
-    todayTextColor: '#0f0',
-    arrowColor: '#0f0',
-    monthTextColor: '#0f0',
-    selectedDayBackgroundColor: '#0f0',
-  }}
-/>
-      </View>
+<View style={styles.container}>
+  <View style={[styles.calendarContainer, { paddingTop: 40 }]}>
+    <Calendar
+      markingType="simple"
+      markedDates={markedDates}
+      onDayPress={(day) => {
+        console.log('Date selected:', day.dateString);
+        setSelectedDate(day.dateString);
+        setModalVisible(true);
+      }}
+      theme={{
+        backgroundColor: '#000',
+        calendarBackground: '#000',
+        textSectionTitleColor: '#0f0',
+        dayTextColor: '#fff',
+        todayTextColor: '#0f0',
+        arrowColor: '#0f0',
+        monthTextColor: '#0f0',
+        selectedDayBackgroundColor: '#0f0',
+      }}
+    />
+  </View>
 
       <ScrollView style={styles.procedureListContainer}>
   {nonRoutineProcedures.map((item) => {

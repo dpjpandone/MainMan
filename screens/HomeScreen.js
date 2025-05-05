@@ -16,6 +16,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSync } from '../contexts/SyncContext';
 import { AppContext } from '../contexts/AppContext';
 import { useContext } from 'react';
+import { wrapWithSync } from '../utils/SyncManager';
 
 export default function HomeScreen({ navigation }) {
   const { setIsSyncing } = useSync();
@@ -27,38 +28,32 @@ export default function HomeScreen({ navigation }) {
 
   useEffect(() => {
     const fetchCompanyAndMachines = async () => {
-      try {
-        setIsSyncing(true);
-  
+      await wrapWithSync('fetchMachines', async () => {
         const session = await AsyncStorage.getItem('loginData');
         const parsedSession = JSON.parse(session);
         const company_id = parsedSession?.companyId;
-  
+    
         if (!company_id) {
           console.error('No companyId found.');
           return;
         }
-  
+    
         setCompanyId(company_id);
         console.log('Loaded companyId:', company_id);
-  
+    
         const { data, error } = await supabase
           .from('machines')
           .select('*')
           .eq('company_id', company_id);
-  
+    
         if (error) {
           console.error('Error fetching machines:', error.message);
         } else {
           setMachines(data);
         }
-      } catch (error) {
-        console.error('Unexpected error loading machines:', error);
-      } finally {
-        setIsSyncing(false);
-      }
+      });
     };
-  
+      
     const unsubscribe = navigation.addListener('focus', fetchCompanyAndMachines);
     return unsubscribe;
   }, [navigation]);
@@ -69,19 +64,12 @@ export default function HomeScreen({ navigation }) {
   };
 
   const addMachine = async () => {
-    if (!newMachineName.trim()) {
-      Alert.alert('Error', 'Please enter a machine name.');
-      return;
-    }
-    if (!companyId) {
-      Alert.alert('Error', 'Company ID not loaded yet.');
-      return;
-    }
+    if (!newMachineName.trim()) return;
   
-    console.log('Adding machine for companyId:', companyId);
-    setIsSyncing(true); 
+
+    setModalVisible(false);
   
-    try {
+    await wrapWithSync('addMachine', async () => {
       const { data, error } = await supabase
         .from('machines')
         .insert([{ name: newMachineName.trim(), company_id: companyId }])
@@ -96,15 +84,9 @@ export default function HomeScreen({ navigation }) {
       console.log('Inserted machine:', data);
       setMachines((prevMachines) => [...prevMachines, ...data]);
       setNewMachineName('');
-      setModalVisible(false);
-    } catch (error) {
-      console.error('Unexpected error adding machine:', error);
-      Alert.alert('Error', 'An unexpected error occurred.');
-    } finally {
-      setIsSyncing(false); 
-    }
+    });
   };
-  
+    
   const deleteMachine = async (id) => {
     Alert.alert(
       'Delete Machine',
@@ -115,30 +97,34 @@ export default function HomeScreen({ navigation }) {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            try {
-              const { error } = await supabase
-                .from('machines')
-                .delete()
-                .eq('id', id)
-                .eq('company_id', companyId);
-
-              if (error) {
-                console.error('Error deleting machine:', error.message);
-                Alert.alert('Error', 'Failed to delete machine.');
-                return;
+            await wrapWithSync('deleteMachine', async () => {
+              try {
+                const { error } = await supabase
+                  .from('machines')
+                  .delete()
+                  .eq('id', id)
+                  .eq('company_id', companyId);
+  
+                if (error) {
+                  console.error('Error deleting machine:', error.message);
+                  Alert.alert('Error', 'Failed to delete machine.');
+                  return;
+                }
+  
+                setMachines((prevMachines) =>
+                  prevMachines.filter((m) => m.id !== id)
+                );
+              } catch (error) {
+                console.error('Unexpected error deleting machine:', error);
+                Alert.alert('Error', 'An unexpected error occurred.');
               }
-
-              setMachines((prevMachines) => prevMachines.filter((m) => m.id !== id));
-            } catch (error) {
-              console.error('Unexpected error deleting machine:', error);
-              Alert.alert('Error', 'An unexpected error occurred.');
-            }
+            });
           },
         },
       ]
     );
   };
-
+  
 
   return (
     <View style={styles.container}>
