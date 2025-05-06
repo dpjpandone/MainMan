@@ -75,32 +75,32 @@ export default function MachineScreen() {
 
   
   const markComplete = async (proc) => {
-    await wrapWithSync('markComplete', async () => {
-      const now = new Date();
-      const dueDate = new Date();
-      dueDate.setDate(now.getDate() + parseInt(proc.interval_days || 0));
+    try {
+      await wrapWithSync('markComplete', async () => {
+        const now = new Date();
+        const dueDate = new Date();
+        dueDate.setDate(now.getDate() + parseInt(proc.interval_days || 0));
   
-      const session = await AsyncStorage.getItem('loginData');
-      const parsedSession = JSON.parse(session);
+        const session = await AsyncStorage.getItem('loginData');
+        const parsedSession = JSON.parse(session);
   
-      const { error } = await supabase
-        .from('procedures')
-        .update({
-          last_completed: now.toISOString(),
-          due_date: dueDate.toISOString(),
-          completed_by: parsedSession?.userId,
-        })
-        .eq('id', proc.id);
+        const { error } = await supabase
+          .from('procedures')
+          .update({
+            last_completed: now.toISOString(),
+            due_date: dueDate.toISOString(),
+            completed_by: parsedSession?.userId,
+          })
+          .eq('id', proc.id);
   
-      if (error) {
-        console.error('Supabase update error:', error);
-        return;
-      }
+        if (error) throw error;
   
-      loadMachineAndProcedures();
-    });
+        loadMachineAndProcedures();
+      });
+     } catch (error) {
+    }
   };
-        
+            
   
   const addProcedure = async () => {
     if (!name.trim() || !interval) return;

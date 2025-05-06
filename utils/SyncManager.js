@@ -1,5 +1,5 @@
 // utils/SyncManager.js
-import { setGlobalSyncing } from '../contexts/SyncContext';
+import { setGlobalSyncing, setGlobalSyncFailed } from '../contexts/SyncContext';
 
 const activeSyncs = {};
 
@@ -24,21 +24,21 @@ export function endSync(label = 'anonymous') {
 
 // Wrap an async function to auto-handle sync state and duration logging
 export async function wrapWithSync(label, fn) {
-    try {
-      startSync(label);
-  
-      // 🔄 Allow React a render pass to display the sync banner
-      await new Promise((res) => setTimeout(res, 0));
-  
-      // 🐢 Simulate network lag during development
-      await new Promise((res) => setTimeout(res, 0));
-  
-      return await fn();
-    } catch (err) {
-      console.error(`[SYNC ERROR] ${label}`, err);
-      throw err;
-    } finally {
-      endSync(label);
-    }
+  try {
+    startSync(label);
+
+    // 🔄 Let React render the sync banner if needed
+    await new Promise((res) => setTimeout(res, 1000));
+
+    // 🐢 Development only: add network lag simulation (remove if unwanted)
+    // await new Promise((res) => setTimeout(res, 0));
+
+    return await fn();
+  } catch (err) {
+    console.error(`[SYNC ERROR] ${label}`, err);
+    setGlobalSyncFailed(true); 
+    throw err;
+  } finally {
+    endSync(label);
   }
-    
+}

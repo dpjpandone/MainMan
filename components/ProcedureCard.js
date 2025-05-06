@@ -35,6 +35,7 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
   const lastCompleted = item.last_completed ? new Date(item.last_completed) : null;
   const intervalDays = item.interval_days || 0;
   const isPastDue = !lastCompleted || (Math.floor((Date.now() - lastCompleted) / 86400000) > intervalDays);
+  const [galleryKey, setGalleryKey] = useState(0);
 
   const renderLinkedDescription = (text) => {
     const parts = text.split(/(\bhttps?:\/\/\S+\b)/g); // Match http/https URLs
@@ -224,7 +225,8 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
           setFileLabels(data.file_labels || []);
         });
       } catch (error) {
-        console.error('Error restoring state on back:', error);
+        setEditMode(false);
+        setImageEditMode(false);
       }
     } else {
       setModalVisible(false);
@@ -233,7 +235,7 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
       }
     }
   };
-  
+    
   const handleImagePick = async () => {
     await uploadProcedureImage({
       procedureId: item.id,
@@ -241,8 +243,11 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
       setImageUrls,
       scrollToEnd: scrollToGalleryEnd,
     });
-  };
+  
     
+    setGalleryKey(prev => prev + 1);
+  };
+      
   //main return
 
   return (
@@ -328,7 +333,9 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
 <Modal visible={modalVisible} transparent={false} animationType="fade">
   <View style={styles.modalOverlay}>
     <StatusBar backgroundColor="#000" barStyle="light-content" />
-    <SyncWarning />
+    <View style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 }}>
+  <SyncWarning />
+</View>
 
   {editMode && !keyboardVisible && (
   <>
@@ -346,11 +353,13 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
   <View style={{ flex: 1 }}>
     {/* Text Section */}
     <View style={{ flex: 1 }}>
-  {!editMode ? (
-    <Text style={styles.cardText}>
-      {renderLinkedDescription(description || 'No description yet.')}
-    </Text>
-  ) : (
+    {!editMode ? (
+      <ScrollView style={styles.scrollBox}>
+  <Text style={styles.cardText}>
+    {renderLinkedDescription(description || 'No description yet.')}
+  </Text>
+</ScrollView>
+) : (
     <TextInput
       style={[
         styles.input,
@@ -380,6 +389,7 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
 >
       {(imageUrls.length > 0 || fileUrls.length > 0) ? (
         <AttachmentGridViewer
+          key={galleryKey}
           imageUrls={imageUrls}
           fileUrls={fileUrls}
           fileLabels={fileLabels} // ✅ Pass this in to display labels

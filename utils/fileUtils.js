@@ -85,9 +85,7 @@ export function FileLabelPrompt({ visible, onSubmit, onCancel }) {
           });
   
           if (uploadResponse.status !== 200) {
-            console.error('Upload failed:', uploadResponse);
-            alert(`Upload failed: ${uploadResponse.status}`);
-            return;
+            throw new Error(`Upload failed with status ${uploadResponse.status}`);
           }
   
           const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_BUCKET}/${fileName}`;
@@ -105,23 +103,17 @@ export function FileLabelPrompt({ visible, onSubmit, onCancel }) {
             })
             .eq('id', procedureId);
   
-          if (patchError) {
-            console.error('Update error:', patchError.message);
-            alert(`Failed to save file info: ${patchError.message}`);
-            return;
-          }
+          if (patchError) throw patchError;
   
           setTimeout(() => {
             if (scrollToEnd) scrollToEnd();
           }, 300);
         }
       });
-    } catch (err) {
-      console.error('File upload error:', err);
-      alert('Upload failed: ' + err.message);
+     } catch (err) {
     }
   }
-
+  
 
 export async function deleteProcedureFile({
   uriToDelete,

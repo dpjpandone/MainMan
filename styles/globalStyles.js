@@ -397,7 +397,24 @@ export const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
-  modalGearIcon: {
+  scrollBox: {
+    flex: 1,
+    backgroundColor: '#111',
+    padding: 10,
+    borderRadius: 8,
+    borderColor: '#333',
+    borderWidth: 1,
+  },
+  warningBox: {
+    backgroundColor: '#000',       // solid black background
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderColor: '#0f0',           // neon green border
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+    modalGearIcon: {
     position: 'absolute',
     top: 8,           
     left: 13,         

@@ -85,8 +85,6 @@ export default function ProcedureSettings({ visible, onClose, procedureId }) {
       Alert.alert('Saved', 'Procedure settings updated.');
       onClose();
     } catch (error) {
-      console.error('Failed to save procedure:', error);
-      Alert.alert('Error', 'Could not save settings.');
     }
   };
   
