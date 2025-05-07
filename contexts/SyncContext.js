@@ -180,7 +180,7 @@ export function FailedSyncBanner() {
   const { failedJobs } = useSync();
   console.log('[CHECK] Current failedJobs:', failedJobs);
   if (!failedJobs || failedJobs.length === 0) return null;
-  console.log('[DEBUG] failedJobs in modal:', failedJobs);
+  //console.log('[DEBUG] failedJobs in modal:', failedJobs);
 
   return (
     <Modal visible transparent animationType="fade">
@@ -253,7 +253,7 @@ export async function runSyncQueue() {
   let pending = 0;
 
   for (const job of jobs) {
-   // job.attemptCount = 5; // ← force final attempt
+   // job.attemptCount = 5; // ← force final attempt for testing UI
     if (!shouldRetry(job)) continue;
 
     pending++;
@@ -274,7 +274,7 @@ export async function runSyncQueue() {
       if (job.attemptCount + 1 >= 5) {
         await markJobAsFailed(job.id);
         console.warn(`[QUEUE] Job ${job.id} permanently failed`);
-  setGlobalFailedJobs(prev => [...prev, job]);
+     //setGlobalFailedJobs(prev => [...prev, job]);//for debugging UI
       }
     }
   }

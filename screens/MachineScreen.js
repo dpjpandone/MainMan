@@ -7,11 +7,10 @@ import ProcedureCard from '../components/ProcedureCard';
 import { useRoute, useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../utils/supaBaseConfig';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { StatusBar } from 'expo-status-bar';
 import { Calendar } from 'react-native-calendars';
 import { wrapWithSync } from '../utils/SyncManager';
 import { QueueBanner } from '../contexts/SyncContext';
-import { StatusBar, Platform, View } from 'react-native';
+import { StatusBar, Platform,  } from 'react-native';
 export default function MachineScreen() {
   const route = useRoute();
   const { machineId } = route.params;

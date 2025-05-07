@@ -4,11 +4,12 @@ import { uploadImageToSupabase } from './imageUtils';
 
 export const jobExecutors = {
   uploadProcedureImage: async (payload) => {
-    console.log('[EXECUTOR] Pretending to upload image:', payload.uri);
-    throw new Error('Simulated upload failure');
-    //console.log('[EXECUTOR] Uploading image via Supabase:', payload.uri);
-    //await uploadImageToSupabase(payload);
-    //console.log('[EXECUTOR] Upload complete');
+    //For testing UI
+    //console.log('[EXECUTOR] Pretending to upload image:', payload.uri);
+    //throw new Error('Simulated upload failure');
+    console.log('[EXECUTOR] Uploading image via Supabase:', payload.uri);
+    await uploadImageToSupabase(payload);
+    console.log('[EXECUTOR] Upload complete');
   }
 };
   

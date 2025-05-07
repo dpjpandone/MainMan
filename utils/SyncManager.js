@@ -34,7 +34,7 @@ export async function wrapWithSync(label, fn) {
     await new Promise((res) => setTimeout(res, 0));
 
     // 🐢 Development only: add network lag simulation (remove if unwanted)
-     await new Promise((res) => setTimeout(res, 2000));
+     await new Promise((res) => setTimeout(res, 1000));
 
     return await fn();
   } catch (err) {
