@@ -12,13 +12,12 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import LoginScreen from './screens/LoginScreen';
 import { AppContext } from './contexts/AppContext';
-
+import { SyncProvider, SyncBanner, QueueBanner, FailedSyncBanner, SyncFailureModal } from './contexts/SyncContext';
 // Screens
 import HomeScreen from './screens/HomeScreen';
 import MasterCalendarScreen from './screens/MasterCalendarScreen';
 import MachineScreen from './screens/MachineScreen';
 import ChecklistScreen from './screens/ChecklistScreen';
-import { SyncProvider, SyncBanner } from './contexts/SyncContext';
 
 // Create Navigators
 const Tab = createBottomTabNavigator();
@@ -91,25 +90,29 @@ export default function App() {
     <AppContext.Provider value={{ loginData, setLoginData }}>
       <SyncProvider>
         <SafeAreaProvider>
-          <GestureHandlerRootView style={{ flex: 1 }}>
-            <NavigationContainer>
-              <Stack.Navigator
-                screenOptions={{ headerShown: false }}
-                initialRouteName={loginData ? 'MainTabs' : 'Login'}
-              >
-                <Stack.Screen name="Login" component={LoginScreen} />
-                <Stack.Screen name="MainTabs" component={TabNavigator} />
-              </Stack.Navigator>
-            </NavigationContainer>
-  
-            <StatusBar style="light" backgroundColor="#000" />
-  
-            {/* 🔥 Floating SyncBanner stays on top of everything */}
-            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 9999 }}>
-              <SyncBanner />
-            </View>
-  
-          </GestureHandlerRootView>
+        <GestureHandlerRootView style={{ flex: 1 }}>
+  <NavigationContainer>
+    <Stack.Navigator
+      screenOptions={{ headerShown: false }}
+      initialRouteName={loginData ? 'MainTabs' : 'Login'}
+    >
+      <Stack.Screen name="Login" component={LoginScreen} />
+      <Stack.Screen name="MainTabs" component={TabNavigator} />
+    </Stack.Navigator>
+  </NavigationContainer>
+
+  <StatusBar style="light" backgroundColor="#000" />
+
+
+  <View style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 9999 }}>
+    <SyncBanner />
+    
+  </View>
+
+
+  <FailedSyncBanner />
+  <SyncFailureModal />
+</GestureHandlerRootView>
         </SafeAreaProvider>
       </SyncProvider>
     </AppContext.Provider>

@@ -9,6 +9,7 @@ import { AppContext } from '../contexts/AppContext';
 import RegisterCompanyModal from './RegisterCompanyModal';
 import AddUserModal from './AddUserModal';
 import { supabase } from '../utils/supaBaseConfig';
+import { useSync,setGlobalQueuedJobCount  } from '../contexts/SyncContext';
 
 export default function LoginScreen({ navigation }) {
   const { loginData, setLoginData } = useContext(AppContext);
@@ -37,6 +38,8 @@ export default function LoginScreen({ navigation }) {
   
     checkStoredCredentials();
   }, []);
+
+
   
   const handleLogin = async (providedEmail, providedPassword, autoLogin = false) => {
     const loginEmail = providedEmail || email;
@@ -103,6 +106,8 @@ export default function LoginScreen({ navigation }) {
     }
   };
 
+      
+
   return (
     <View style={styles.container}>
       <Text style={styles.header}>Login</Text>
@@ -124,6 +129,7 @@ export default function LoginScreen({ navigation }) {
         value={password}
         onChangeText={setPassword}
       />
+ 
 <TouchableOpacity
   onPress={() => setRememberMe(!rememberMe)}
   style={styles.rememberMeWrapper}
@@ -176,6 +182,20 @@ export default function LoginScreen({ navigation }) {
   >
     <Text style={{ color: '#FF0000', textAlign: 'center', marginTop: 20 }}>
       [ Log Out ]
+    </Text>
+  </TouchableOpacity>
+)}
+{loginData?.role === 'admin' && (
+  <TouchableOpacity
+    onPress={async () => {
+      await AsyncStorage.removeItem('syncJobQueue');
+      setGlobalQueuedJobCount(0);
+      console.log('[CLEANUP] Sync queue cleared manually.');
+      Alert.alert('Queue Cleared', 'Sync queue has been reset.');
+          }}
+  >
+    <Text style={{ color: '#888', textAlign: 'center', marginTop: 10 }}>
+      [ Clear Sync Queue ]
     </Text>
   </TouchableOpacity>
 )}

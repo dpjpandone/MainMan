@@ -1,28 +1,70 @@
-import { View, Text, StyleSheet, Platform, StatusBar, Modal, TouchableOpacity } from 'react-native';
+import { View, Text, Platform, StatusBar, Modal, TouchableOpacity, StyleSheet, AppState } from 'react-native';
 import React, { createContext, useState, useContext, useEffect, useRef } from 'react';
-// Global setters (used by SyncManager or elsewhere)
+import { loadJobs, removeJob, markJobAsFailed, incrementRetry } from '../utils/JobQueue';
+import { jobExecutors } from '../utils/jobExecutors';
+import NetInfo from '@react-native-community/netinfo';
+
+// Global setters (used outside component scope)
 export let setGlobalSyncing = () => {};
 export let setGlobalSyncFailed = () => {};
 export let acknowledgeSyncFailure = () => {};
+export let setGlobalQueuedJobCount = () => {};
+export let setGlobalFailedJobs = () => {};
 
 const SyncContext = createContext();
+
 
 export const SyncProvider = ({ children }) => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncFailed, setSyncFailed] = useState(false);
   const [syncAcknowledged, setSyncAcknowledged] = useState(true);
+  const [queuedJobCount, setQueuedJobCount] = useState(0);
+  const [failedJobs, setFailedJobs] = useState([]);
 
+  setGlobalFailedJobs = setFailedJobs;
   setGlobalSyncing = setIsSyncing;
   setGlobalSyncFailed = (fail = true) => {
     setSyncFailed(fail);
     setSyncAcknowledged(!fail);
   };
   acknowledgeSyncFailure = () => setSyncAcknowledged(true);
+  setGlobalQueuedJobCount = setQueuedJobCount;
+
+  // ✅ TRIGGERS MUST BE INSIDE FUNCTION COMPONENT
+  useEffect(() => {
+    const appStateListener = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        console.log('[TRIGGER] App resumed – running sync queue');
+        runSyncQueue();
+      }
+    });
+
+    const netInfoUnsubscribe = NetInfo.addEventListener(state => {
+      if (state.isConnected) {
+        console.log('[TRIGGER] Network reconnected – running sync queue');
+        runSyncQueue();
+      }
+    });
+
+    return () => {
+      appStateListener.remove();
+      netInfoUnsubscribe();
+    };
+  }, []);
 
   return (
-    <SyncContext.Provider value={{ isSyncing, setIsSyncing, syncFailed, syncAcknowledged }}>
+    <SyncContext.Provider
+    value={{
+      isSyncing,
+      setIsSyncing,
+      syncFailed,
+      syncAcknowledged,
+      queuedJobCount,
+      setQueuedJobCount,
+      failedJobs,
+    }}
+        >
       {children}
-      <SyncFailureModal />
     </SyncContext.Provider>
   );
 };
@@ -65,6 +107,38 @@ export function SyncBanner() {
     </View>
   );
 }
+// ---------------------------
+// QUEUE BANNER
+// ---------------------------
+export function QueueBanner() {
+  const { queuedJobCount } = useSync();
+  const [dots, setDots] = useState('');
+  const dotCount = useRef(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      dotCount.current = (dotCount.current + 1) % 4;
+      setDots('.'.repeat(dotCount.current));
+    }, 400);
+    return () => clearInterval(interval);
+  }, []);
+
+  if (!queuedJobCount || queuedJobCount === 0) return null;
+
+  return (
+    <View style={{
+      backgroundColor: '#112',
+      borderColor: '#0f0',
+      borderWidth: 1,
+      padding: 8,
+      alignItems: 'center',
+    }}>
+      <Text style={{ color: '#0f0', fontFamily: 'Courier', fontSize: 13 }}>
+        QUEUE ACTIVE ({queuedJobCount} job{queuedJobCount > 1 ? 's' : ''}){dots}
+      </Text>
+    </View>
+  );
+}
 
 // ---------------------------
 // SYNC WARNING
@@ -97,15 +171,58 @@ export function SyncWarning() {
   if (!shouldRender) return null;
 
   return (
-<View style={styles.warningBox}>
-  <Text style={styles.syncText}>LOADING MAINFRAME{dots}</Text>
-</View>
+    <View>
+      <Text>LOADING MAINFRAME{dots}</Text>
+    </View>
+  );
+}
+export function FailedSyncBanner() {
+  const { failedJobs } = useSync();
+  console.log('[CHECK] Current failedJobs:', failedJobs);
+  if (!failedJobs || failedJobs.length === 0) return null;
+  console.log('[DEBUG] failedJobs in modal:', failedJobs);
+
+  return (
+    <Modal visible transparent animationType="fade">
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContainer}>
+          <Text style={styles.modalTitle}>Upload Failed</Text>
+          <Text style={styles.modalText}>
+            {failedJobs.length} upload{failedJobs.length > 1 ? 's' : ''} failed to sync.
+          </Text>
+
+          <View style={{ flexDirection: 'row', justifyContent: 'center' }}>
+            <TouchableOpacity
+              onPress={() => {
+                failedJobs.forEach(job => {
+                  job.attemptCount = 0;
+                  job.status = 'queued';
+                });
+                setGlobalFailedJobs([]);
+                setGlobalQueuedJobCount(prev => prev + failedJobs.length);
+                runSyncQueue(); // Retry now
+              }}
+              style={[styles.modalButton, { marginRight: 10 }]}
+            >
+              <Text style={styles.modalButtonText}>Retry</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => setGlobalFailedJobs([])}
+              style={[styles.modalButton, { backgroundColor: '#888' }]}
+            >
+              <Text style={[styles.modalButtonText, { color: '#fff' }]}>Dismiss</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 }
 // ---------------------------
 // SYNC FAILURE MODAL
 // ---------------------------
-function SyncFailureModal() {
+export function SyncFailureModal() {
   const { syncFailed, syncAcknowledged } = useSync();
 
   if (!syncFailed || syncAcknowledged) return null;
@@ -115,7 +232,9 @@ function SyncFailureModal() {
       <View style={styles.modalOverlay}>
         <View style={styles.modalContainer}>
           <Text style={styles.modalTitle}>Sync Failed</Text>
-          <Text style={styles.modalText}>Unable to complete sync operation. Check connection and try again.</Text>
+          <Text style={styles.modalText}>
+            Unable to complete sync operation. Check connection and try again.
+          </Text>
           <TouchableOpacity style={styles.modalButton} onPress={acknowledgeSyncFailure}>
             <Text style={styles.modalButtonText}>Dismiss</Text>
           </TouchableOpacity>
@@ -125,6 +244,55 @@ function SyncFailureModal() {
   );
 }
 
+// ---------------------------
+// QUEUE RUNNER
+// ---------------------------
+export async function runSyncQueue() {
+  await new Promise(res => setTimeout(res, 2000));
+  const jobs = await loadJobs();
+  let pending = 0;
+
+  for (const job of jobs) {
+   // job.attemptCount = 5; // ← force final attempt
+    if (!shouldRetry(job)) continue;
+
+    pending++;
+
+    try {
+      console.log(`[QUEUE] Executing job ${job.id} (${job.label})`);
+
+      const executor = jobExecutors[job.label];
+      if (!executor) throw new Error(`No executor for label: ${job.label}`);
+
+      await executor(job.payload);
+      await removeJob(job.id);
+      console.log(`[QUEUE] Job ${job.id} completed and removed`);
+    } catch (err) {
+      console.warn(`[QUEUE] Job ${job.id} failed`, err);
+      await incrementRetry(job.id);
+
+      if (job.attemptCount + 1 >= 5) {
+        await markJobAsFailed(job.id);
+        console.warn(`[QUEUE] Job ${job.id} permanently failed`);
+  setGlobalFailedJobs(prev => [...prev, job]);
+      }
+    }
+  }
+
+  const updatedJobs = await loadJobs();
+  setGlobalQueuedJobCount(updatedJobs.filter(j => j.status === 'queued').length);
+}
+
+function shouldRetry(job) {
+  if (job.status === 'done' || job.status === 'failed') return false;
+  if (job.attemptCount >= 5) return false;
+
+  const baseDelay = 3000;
+  const delay = baseDelay * Math.pow(2, job.attemptCount);
+  const timeSinceLast = Date.now() - job.lastAttempt;
+
+  return timeSinceLast >= delay;
+}
 // ---------------------------
 // STYLES
 // ---------------------------

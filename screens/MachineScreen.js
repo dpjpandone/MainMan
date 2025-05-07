@@ -10,7 +10,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 import { Calendar } from 'react-native-calendars';
 import { wrapWithSync } from '../utils/SyncManager';
-
+import { QueueBanner } from '../contexts/SyncContext';
+import { StatusBar, Platform, View } from 'react-native';
 export default function MachineScreen() {
   const route = useRoute();
   const { machineId } = route.params;
@@ -157,8 +158,12 @@ export default function MachineScreen() {
   );
     
   return (
+    <View style={{ flex: 1, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 40 : 40 }}>
+      <QueueBanner />  
+
     <View style={styles.container}>
       <StatusBar backgroundColor="#000" style="light" />
+     
       <Text style={styles.header}>{machine?.name}</Text>
 
       <FlatList
@@ -261,6 +266,7 @@ export default function MachineScreen() {
     </View>
   </View>
 </Modal>
+    </View>
     </View>
   );
 }

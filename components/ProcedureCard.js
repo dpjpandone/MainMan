@@ -12,6 +12,7 @@ import { uploadProcedureFile, deleteProcedureFile, AttachmentGridViewer, FileLab
 import * as Linking from 'expo-linking';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import ProcedureSettings from './ProcedureSettings';
+import { handleImageSelection } from '../utils/imageUtils';
 
 export default function ProcedureCard({ item, onComplete, onDelete, refreshMachine }) {
 
@@ -237,17 +238,16 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
   };
     
   const handleImagePick = async () => {
-    await uploadProcedureImage({
+    await handleImageSelection({
       procedureId: item.id,
       imageUrls,
       setImageUrls,
       scrollToEnd: scrollToGalleryEnd,
     });
   
-    
     setGalleryKey(prev => prev + 1);
   };
-      
+        
   //main return
 
   return (
