@@ -67,7 +67,7 @@ export const SyncProvider = ({ children }) => {
       {children}
     </SyncContext.Provider>
   );
-};
+ };
 
 export const useSync = () => useContext(SyncContext);
 

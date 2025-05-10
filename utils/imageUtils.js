@@ -8,7 +8,7 @@ import { SUPABASE_URL, SUPABASE_BUCKET, SUPABASE_KEY, supabase } from './supaBas
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { wrapWithSync, tryNowOrQueue } from './SyncManager';
-import { addJob } from './JobQueue';
+import { addJob, loadJobs, removeJob } from './JobQueue';
 
 export function FullscreenImageViewerController({ imageUrls }) {
   const [selectedImageIndex, setSelectedImageIndex] = useState(null);
@@ -137,8 +137,37 @@ export function FullscreenImageViewer({
 }
 
 // Delete Image Helper
-export async function deleteProcedureImage({ uriToDelete, imageUrls, procedureId, setImageUrls, refreshMachine }) {
+export async function deleteProcedureImage({
+  uriToDelete,
+  imageUrls,
+  procedureId,
+  setImageUrls,
+  refreshMachine,
+}) {
   try {
+    // 🛑 Prevent attempt to delete file:// images from Supabase
+    if (uriToDelete.startsWith('file://')) {
+      console.warn('[SKIP DELETE] Attempted to delete local-only image:', uriToDelete);
+    
+      // Clean up local image from gallery
+      const updatedImages = imageUrls.filter(uri => uri !== uriToDelete);
+      setImageUrls(updatedImages);
+    
+      // 🧹 Attempt to remove corresponding upload job from queue
+      const jobs = await loadJobs();
+      const match = jobs.find(j =>
+        j.label === 'uploadProcedureImage' &&
+        j.payload?.localUri === uriToDelete
+      );
+    
+      if (match) {
+        await removeJob(match.id);
+        console.log('[QUEUE CLEANUP] Removed pending upload job for deleted image:', uriToDelete);
+      }
+    
+      return;
+    }
+    
     await wrapWithSync('deleteProcedureImage', async () => {
       const imageName = uriToDelete.split('/').pop();
 
@@ -176,19 +205,22 @@ export async function handleImageSelection({ procedureId, imageUrls, setImageUrl
 
     const asset = result.assets[0];
     const localUri = asset.uri;
+    const fileName = `${procedureId}-${Date.now()}.jpg`;
 
     // 1. Optimistically add local image to gallery
     const updated = [...imageUrls, localUri];
     setImageUrls(updated);
 
-    await tryNowOrQueue('uploadProcedureImage', {
-      uri: localUri,
-      procedureId,
-    }, {
-      attempts: 3,
-      delayMs: 1000,
-    });
+await tryNowOrQueue('uploadProcedureImage', {
+  localUri,
+  procedureId,
+  fileName,
+}, { attempts: 3, delayMs: 1000 });
 
+loadJobs().then(jobs => {
+  const count = jobs.filter(j => j.label === 'uploadProcedureImage').length;
+  console.log('[DEBUG] Total queued image uploads:', count);
+});
 
     if (scrollToEnd) {
       setTimeout(scrollToEnd, 300);
@@ -198,15 +230,27 @@ export async function handleImageSelection({ procedureId, imageUrls, setImageUrl
   }
 }
 
-export async function uploadImageToSupabase({ uri, procedureId }) {
-  try {
-    const fileName = `${procedureId}-${Date.now()}.jpg`;
+export async function uploadImageToSupabase({ localUri, procedureId, fileName }) {
+  const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_BUCKET}/${fileName}`;
 
-    // Step 1: Define Supabase upload target URL
+  // Optional early exit: check if image is still expected
+  const { data: procDataCheck, error: checkError } = await supabase
+    .from('procedures')
+    .select('image_urls')
+    .eq('id', procedureId)
+    .single();
+
+  if (checkError) throw checkError;
+
+  if (procDataCheck?.image_urls?.includes(publicUrl)) {
+    console.log('[UPLOAD] Image already exists in DB, skipping duplicate.');
+    return;
+  }
+
+  try {
     const uploadUrl = `${SUPABASE_URL}/storage/v1/object/${SUPABASE_BUCKET}/${fileName}`;
 
-    // Step 2: Use FileSystem.uploadAsync() with Supabase headers
-    const result = await FileSystem.uploadAsync(uploadUrl, uri, {
+    const result = await FileSystem.uploadAsync(uploadUrl, localUri, {
       httpMethod: 'PUT',
       headers: {
         'Authorization': `Bearer ${SUPABASE_KEY}`,
@@ -216,14 +260,12 @@ export async function uploadImageToSupabase({ uri, procedureId }) {
     });
 
     if (result.status !== 200) {
-      console.error('Upload failed with status:', result.status);
+      console.warn(`[UPLOAD RETRY] HTTP ${result.status} for ${fileName}`);
       throw new Error('Supabase upload failed');
     }
-
-    // Step 3: Construct public URL
+    
     const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_BUCKET}/${fileName}`;
 
-    // Step 4: Get current image list from Supabase
     const { data: procData, error: fetchError } = await supabase
       .from('procedures')
       .select('image_urls')
@@ -232,20 +274,22 @@ export async function uploadImageToSupabase({ uri, procedureId }) {
 
     if (fetchError) throw fetchError;
 
-    const current = procData?.image_urls || [];
-    const updated = [...current, publicUrl];
+// Avoid adding publicUrl if it already exists (idempotent)
+const current = procData?.image_urls || [];
+const updated = current.includes(publicUrl)
+  ? current
+  : [...current, publicUrl];
 
-    // Step 5: Update Supabase procedure record
-    const { error: updateError } = await supabase
-      .from('procedures')
-      .update({ image_urls: updated })
-      .eq('id', procedureId);
+const { error: updateError } = await supabase
+  .from('procedures')
+  .update({ image_urls: updated })
+  .eq('id', procedureId);
 
     if (updateError) throw updateError;
 
     console.log('[UPLOAD] Image uploaded and database updated:', publicUrl);
   } catch (error) {
-    console.error('Failed to upload image from queue:', error);
+    console.warn('[QUEUE RETRY] Image upload will retry later:', error.message);
     throw error;
   }
 }

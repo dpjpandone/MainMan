@@ -38,9 +38,10 @@ export async function wrapWithSync(label, fn) {
 
     return await fn();
   } catch (err) {
-    console.error(`[SYNC ERROR] ${label}`, err);
-    setGlobalSyncFailed(true); 
+    console.warn(`[SYNC ERROR] ${label}: ${err.message}`);
+    setGlobalSyncFailed(true);
     throw err;
+  
   } finally {
     endSync(label);
   }

@@ -157,7 +157,10 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
           console.error('Procedure not found or error:', error);
           return;
         }
-  
+        
+
+        //console.log('[DEBUG] Supabase image_urls:', data.image_urls);
+
         setDescription(data.description || '');
         setImageUrls(data.image_urls || []);
         setFileUrls(data.file_urls || []);
