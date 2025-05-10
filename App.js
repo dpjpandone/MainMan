@@ -12,7 +12,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import LoginScreen from './screens/LoginScreen';
 import { AppContext } from './contexts/AppContext';
-import { SyncProvider, SyncBanner, QueueBanner, FailedSyncBanner, SyncFailureModal } from './contexts/SyncContext';
+import { SyncProvider, CombinedSyncBanner, FailedSyncBanner, SyncFailureModal } from './contexts/SyncContext';
 // Screens
 import HomeScreen from './screens/HomeScreen';
 import MasterCalendarScreen from './screens/MasterCalendarScreen';
@@ -104,10 +104,7 @@ export default function App() {
   <StatusBar style="light" backgroundColor="#000" />
 
 
-  <View style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 9999 }}>
-    <SyncBanner />
-    
-  </View>
+  <CombinedSyncBanner />
 
 
   <FailedSyncBanner />

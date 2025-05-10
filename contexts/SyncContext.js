@@ -71,74 +71,6 @@ export const SyncProvider = ({ children }) => {
 
 export const useSync = () => useContext(SyncContext);
 
-// ---------------------------
-// SYNC BANNER
-// ---------------------------
-export function SyncBanner() {
-  const { isSyncing } = useSync();
-  const dotCount = useRef(0);
-  const [dots, setDots] = useState('');
-  const [shouldRender, setShouldRender] = useState(false);
-
-  useEffect(() => {
-    let delayTimer;
-    if (isSyncing) {
-      delayTimer = setTimeout(() => setShouldRender(true), 300);
-    } else {
-      setShouldRender(false);
-    }
-    return () => clearTimeout(delayTimer);
-  }, [isSyncing]);
-
-  useEffect(() => {
-    if (!shouldRender) return;
-    const interval = setInterval(() => {
-      dotCount.current = (dotCount.current + 1) % 4;
-      setDots('.'.repeat(dotCount.current));
-    }, 400);
-    return () => clearInterval(interval);
-  }, [shouldRender]);
-
-  if (!shouldRender) return null;
-
-  return (
-    <View style={[styles.banner, { paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight || 24 : 0 }]}>
-      <Text style={styles.syncText}>SYNC IN PROGRESS{dots}</Text>
-    </View>
-  );
-}
-// ---------------------------
-// QUEUE BANNER
-// ---------------------------
-export function QueueBanner() {
-  const { queuedJobCount } = useSync();
-  const [dots, setDots] = useState('');
-  const dotCount = useRef(0);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      dotCount.current = (dotCount.current + 1) % 4;
-      setDots('.'.repeat(dotCount.current));
-    }, 400);
-    return () => clearInterval(interval);
-  }, []);
-
-  if (!queuedJobCount || queuedJobCount === 0) return null;
-
-  return (
-    <View style={{
-      backgroundColor: '#112',
-      borderColor: '#0f0',
-      borderWidth: 1,
-      padding: 8,
-      alignItems: 'center',
-    }}>
-      <Text style={{ color: '#0f0', fontFamily: 'Courier', fontSize: 13 }}>
-        QUEUE ACTIVE ({queuedJobCount} job{queuedJobCount > 1 ? 's' : ''}){dots}
-      </Text>
-    </View>
-  );
-}
 
 // ---------------------------
 // SYNC WARNING
@@ -292,6 +224,41 @@ function shouldRetry(job) {
   const timeSinceLast = Date.now() - job.lastAttempt;
 
   return timeSinceLast >= delay;
+}
+
+///COMBINED SYNC BANNER///
+export function CombinedSyncBanner() {
+  const { isSyncing, queuedJobCount } = useSync();
+  const [dots, setDots] = useState('');
+  const dotCount = useRef(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      dotCount.current = (dotCount.current + 1) % 4;
+      setDots('.'.repeat(dotCount.current));
+    }, 400);
+    return () => clearInterval(interval);
+  }, []);
+
+  const shouldRender = isSyncing || queuedJobCount > 0;
+  if (!shouldRender) return null;
+
+  let bannerText = '';
+  if (isSyncing && queuedJobCount > 0) {
+    bannerText = `SYNC IN PROGRESS (${queuedJobCount} job${queuedJobCount > 1 ? 's' : ''})${dots}`;
+  } else if (isSyncing) {
+    bannerText = `SYNC IN PROGRESS${dots}`;
+  } else {
+    bannerText = `QUEUE ACTIVE (${queuedJobCount} job${queuedJobCount > 1 ? 's' : ''})${dots}`;
+  }
+
+  const topPadding = Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 0;
+
+  return (
+    <View style={[styles.banner, { paddingTop: topPadding }]}>
+      <Text style={styles.syncText}>{bannerText}</Text>
+    </View>
+  );
 }
 // ---------------------------
 // STYLES

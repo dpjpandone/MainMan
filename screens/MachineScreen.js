@@ -9,7 +9,7 @@ import { supabase } from '../utils/supaBaseConfig';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Calendar } from 'react-native-calendars';
 import { wrapWithSync } from '../utils/SyncManager';
-import { QueueBanner } from '../contexts/SyncContext';
+import { CombinedSyncBanner } from '../contexts/SyncContext';
 import { StatusBar, Platform,  } from 'react-native';
 export default function MachineScreen() {
   const route = useRoute();
@@ -157,30 +157,29 @@ export default function MachineScreen() {
   );
     
   return (
-    <View style={{ flex: 1, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 40 : 40 }}>
-      <QueueBanner />  
 
+    <View style={{ flex: 1 }}>
+   
+    <CombinedSyncBanner />
+
+    
     <View style={styles.container}>
       <StatusBar backgroundColor="#000" style="light" />
-     
+
       <Text style={styles.header}>{machine?.name}</Text>
 
       <FlatList
-  data={procedures.filter(p => !p.is_non_routine)}
-  keyExtractor={(item) => item.id.toString()}  // ← fix here
-  renderItem={renderProcedure}
-/>
+        data={procedures.filter(p => !p.is_non_routine)}
+        keyExtractor={(item) => item.id.toString()}
+        renderItem={renderProcedure}
+      />
 
       <TouchableOpacity style={styles.addBtn} onPress={() => setModalVisible(true)}>
         <Text style={styles.addBtnText}>+ Add Procedure</Text>
       </TouchableOpacity>
 
-      <Modal
-        visible={modalVisible}
-        transparent
-        animationType="slide"
-        statusBarTranslucent
-      >
+     
+      <Modal visible={modalVisible} transparent animationType="slide" statusBarTranslucent>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
             <Text style={styles.modalTitle}>New Procedure</Text>
@@ -192,14 +191,13 @@ export default function MachineScreen() {
               onChangeText={setName}
               style={styles.input}
             />
-                        <TextInput
+            <TextInput
               placeholder="Description"
               placeholderTextColor="#777"
               value={description}
               onChangeText={setDescription}
               style={styles.input}
             />
-
             <TextInput
               placeholder="Interval (days)"
               placeholderTextColor="#777"
@@ -208,15 +206,14 @@ export default function MachineScreen() {
               onChangeText={setInterval}
               style={styles.input}
             />
+
             <Text style={{ color: '#0f0', marginBottom: 5 }}>Starting Date:</Text>
-<TouchableOpacity
-  onPress={() => setCalendarVisible(true)}
-  style={[styles.input, { justifyContent: 'center' }]}
->
-  <Text style={{ color: '#fff' }}>{startingDate.toDateString()}</Text>
-</TouchableOpacity>
-
-
+            <TouchableOpacity
+              onPress={() => setCalendarVisible(true)}
+              style={[styles.input, { justifyContent: 'center' }]}
+            >
+              <Text style={{ color: '#fff' }}>{startingDate.toDateString()}</Text>
+            </TouchableOpacity>
 
             <TouchableOpacity style={styles.button} onPress={addProcedure}>
               <Text style={styles.buttonText}>Save</Text>
@@ -228,44 +225,42 @@ export default function MachineScreen() {
           </View>
         </View>
       </Modal>
-      <Modal
-  visible={calendarVisible}
-  transparent={true}
-  animationType="slide"
->
-  <View style={styles.modalOverlay}>
-    <View style={styles.modalContainer}>
-      <Text style={styles.modalTitle}>Select Starting Date</Text>
 
-      <Calendar
-        onDayPress={(day) => {
-          const selected = new Date(day.dateString);
-          setStartingDate(selected);
-          setCalendarVisible(false);
-        }}
-        markedDates={{
-          [startingDate.toISOString().split('T')[0]]: {
-            selected: true,
-            selectedColor: '#0f0'
-          }
-        }}
-        theme={{
-          calendarBackground: '#111',
-          dayTextColor: '#fff',
-          monthTextColor: '#0f0',
-          arrowColor: '#0f0',
-          selectedDayTextColor: '#000',
-          todayTextColor: '#0f0',
-        }}
-      />
+      {/* ----------------- Calendar Modal ----------------- */}
+      <Modal visible={calendarVisible} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>Select Starting Date</Text>
 
-      <TouchableOpacity onPress={() => setCalendarVisible(false)}>
-        <Text style={styles.cancelText}>Cancel</Text>
-      </TouchableOpacity>
+            <Calendar
+              onDayPress={(day) => {
+                const selected = new Date(day.dateString);
+                setStartingDate(selected);
+                setCalendarVisible(false);
+              }}
+              markedDates={{
+                [startingDate.toISOString().split('T')[0]]: {
+                  selected: true,
+                  selectedColor: '#0f0',
+                },
+              }}
+              theme={{
+                calendarBackground: '#111',
+                dayTextColor: '#fff',
+                monthTextColor: '#0f0',
+                arrowColor: '#0f0',
+                selectedDayTextColor: '#000',
+                todayTextColor: '#0f0',
+              }}
+            />
+
+            <TouchableOpacity onPress={() => setCalendarVisible(false)}>
+              <Text style={styles.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   </View>
-</Modal>
-    </View>
-    </View>
-  );
+);
 }
