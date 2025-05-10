@@ -13,6 +13,7 @@ import * as Linking from 'expo-linking';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import ProcedureSettings from './ProcedureSettings';
 import { handleImageSelection } from '../utils/imageUtils';
+import { tryNowOrQueue } from '../utils/SyncManager';
 
 export default function ProcedureCard({ item, onComplete, onDelete, refreshMachine }) {
 
@@ -154,13 +155,10 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
           .single();
   
         if (error || !data) {
-          console.error('Procedure not found or error:', error);
+          console.log('Procedure not found or error:', error); // 👈 log only
           return;
         }
-        
-
-        //console.log('[DEBUG] Supabase image_urls:', data.image_urls);
-
+  
         setDescription(data.description || '');
         setImageUrls(data.image_urls || []);
         setFileUrls(data.file_urls || []);
@@ -169,11 +167,11 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
   
       setEditMode(false);
       setImageEditMode(false);
-    } catch (error) {
-      console.error('Error loading latest procedure:', error);
+    } catch (err) {
+      console.log('[SAFE FAIL] openModal failed but UI continues');
     }
   };
-        
+          
   const handleDeleteImage = (uri) => {
     deleteProcedureImage({
       uriToDelete: uri,
@@ -186,29 +184,24 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
     });
   };
     
+
   const saveDescription = async () => {
     try {
-      await wrapWithSync('saveProcedureDescription', async () => {
-        const { error } = await supabase
-          .from('procedures')
-          .update({
-            description,
-            image_urls: imageUrls,
-            file_urls: fileUrls,
-            file_labels: fileLabels,
-          })
-          .eq('id', item.id);
-  
-        if (error) throw error;
-  
-        setEditMode(false);
-        setImageEditMode(false);
+      await tryNowOrQueue('saveProcedureDescription', {
+        procedureId: item.id,
+        description,
+        imageUrls,
+        fileUrls,
+        fileLabels,
       });
+  
+      setEditMode(false);
+      setImageEditMode(false);
     } catch (error) {
-      console.error('Failed to save description:', error);
+      console.error('Failed to queue description update:', error);
     }
   };
-      
+        
   const handleBack = async () => {
     if (editMode) {
       try {
@@ -221,25 +214,27 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
   
           if (error || !data) throw error;
   
-          setEditMode(false);
-          setImageEditMode(false);
           setDescription(data.description || '');
           setImageUrls(data.image_urls || []);
           setFileUrls(data.file_urls || []);
           setFileLabels(data.file_labels || []);
         });
-      } catch (error) {
+      } catch (err) {
+        console.log('[BACK FALLBACK] Failed to restore data, exiting anyway.');
+      } finally {
+        // ✅ Always exit edit mode
         setEditMode(false);
         setImageEditMode(false);
       }
     } else {
+      // ✅ Always allow exit from modal
       setModalVisible(false);
       if (typeof refreshMachine === 'function') {
         refreshMachine();
       }
     }
   };
-    
+        
   const handleImagePick = async () => {
     await handleImageSelection({
       procedureId: item.id,

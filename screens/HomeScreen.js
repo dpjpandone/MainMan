@@ -32,32 +32,26 @@ export default function HomeScreen({ navigation }) {
         const session = await AsyncStorage.getItem('loginData');
         const parsedSession = JSON.parse(session);
         const company_id = parsedSession?.companyId;
-    
-        if (!company_id) {
-          console.error('No companyId found.');
-          return;
-        }
-    
+  
+        if (!company_id) throw new Error('Missing companyId');
+  
         setCompanyId(company_id);
-        console.log('Loaded companyId:', company_id);
-    
+  
         const { data, error } = await supabase
           .from('machines')
           .select('*')
           .eq('company_id', company_id);
-    
-        if (error) {
-          console.error('Error fetching machines:', error.message);
-        } else {
-          setMachines(data);
-        }
+  
+        if (error) throw error;
+  
+        setMachines(data);
       });
     };
-      
+  
     const unsubscribe = navigation.addListener('focus', fetchCompanyAndMachines);
     return unsubscribe;
   }, [navigation]);
-            
+              
 
   const goToMachine = (machineId) => {
     navigation.navigate('MachineScreen', { machineId });
@@ -75,11 +69,7 @@ export default function HomeScreen({ navigation }) {
         .insert([{ name: newMachineName.trim(), company_id: companyId }])
         .select();
   
-      if (error) {
-        console.error('Supabase Insert Error:', error.message);
-        Alert.alert('Error', 'Failed to add machine: ' + error.message);
-        return;
-      }
+        if (error) throw error;
   
       console.log('Inserted machine:', data);
       setMachines((prevMachines) => [...prevMachines, ...data]);
@@ -98,27 +88,18 @@ export default function HomeScreen({ navigation }) {
           style: 'destructive',
           onPress: async () => {
             await wrapWithSync('deleteMachine', async () => {
-              try {
-                const { error } = await supabase
-                  .from('machines')
-                  .delete()
-                  .eq('id', id)
-                  .eq('company_id', companyId);
-  
-                if (error) {
-                  console.error('Error deleting machine:', error.message);
-                  Alert.alert('Error', 'Failed to delete machine.');
-                  return;
-                }
-  
-                setMachines((prevMachines) =>
-                  prevMachines.filter((m) => m.id !== id)
-                );
-              } catch (error) {
-                console.error('Unexpected error deleting machine:', error);
-                Alert.alert('Error', 'An unexpected error occurred.');
-              }
-            });
+              const { error } = await supabase
+              .from('machines')
+              .delete()
+              .eq('id', id)
+              .eq('company_id', companyId);
+            
+            if (error) throw error;
+            
+            setMachines((prevMachines) =>
+              prevMachines.filter((m) => m.id !== id)
+            );
+                        });
           },
         },
       ]

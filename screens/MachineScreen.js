@@ -11,9 +11,56 @@ import { Calendar } from 'react-native-calendars';
 import { wrapWithSync } from '../utils/SyncManager';
 import { CombinedSyncBanner } from '../contexts/SyncContext';
 import { StatusBar, Platform,  } from 'react-native';
+import { tryNowOrQueue, subscribeToJobComplete } from '../utils/SyncManager';
+import { addInAppLog } from '../utils/InAppLogger';
+
 export default function MachineScreen() {
   const route = useRoute();
   const { machineId } = route.params;
+
+  const [refreshKey, setRefreshKey] = useState(0);
+const [lastJobLabel, setLastJobLabel] = useState(null);
+
+  
+  const loadMachineAndProcedures = useCallback(async () => {
+    await wrapWithSync('loadMachineAndProcedures', async () => {
+      const { data: machineData } = await supabase
+        .from('machines')
+        .select('*')
+        .eq('id', machineId)
+        .single();
+  
+      const { data: proceduresData } = await supabase
+        .from('procedures')
+        .select('*')
+        .eq('machine_id', machineId)
+        .order('due_date', { ascending: true });
+  
+      setMachine(machineData);
+      setProcedures([...proceduresData]);
+    });
+  }, [machineId]);
+    
+
+  useEffect(() => {
+    const unsubscribe = subscribeToJobComplete((label, payload) => {
+      addInAppLog(`[CALLBACK] Job complete received in MachineScreen: ${label}`);
+  
+      if (
+        label === 'markProcedureComplete' ||
+        label === 'updateProcedureSettings' ||
+        label === 'addProcedure' // ✅ Add this line
+      ) {
+        addInAppLog(`[MATCH] Recognized label in MachineScreen: ${label}`);
+        setLastJobLabel(label);
+        loadMachineAndProcedures();
+      } else {
+        addInAppLog(`[SKIP] Ignored job: ${label}`);
+      }
+    });
+    return unsubscribe;
+  }, []);
+  
 
   const [machine, setMachine] = useState(null);
   const [procedures, setProcedures] = useState([]);
@@ -30,123 +77,78 @@ export default function MachineScreen() {
     }, [machineId])
   );
       
-  const loadMachineAndProcedures = async () => {
-    await wrapWithSync('loadMachineAndProcedures', async () => {
-      const { data: machineData, error: machineError } = await supabase
-        .from('machines')
-        .select('*')
-        .eq('id', machineId)
-        .single();
-  
-      if (machineError) throw machineError;
-  
-      const { data: proceduresData, error: proceduresError } = await supabase
-        .from('procedures')
-        .select('*')
-        .eq('machine_id', machineId)
-        .order('due_date', { ascending: true });
-  
-      if (proceduresError) throw proceduresError;
-  
-      setMachine(machineData);
-      setProcedures(proceduresData);
-    });
-  };
-  
+    
   const deleteProcedure = async (procId) => {
     await wrapWithSync('deleteProcedure', async () => {
-      try {
-        const { error } = await supabase
-          .from('procedures')
-          .delete()
-          .eq('id', procId);
+      const { error } = await supabase
+        .from('procedures')
+        .delete()
+        .eq('id', procId);
   
-        if (error) {
-          console.error('Supabase delete error:', error.message);
-          return;
-        }
+      if (error) throw error;
   
-        loadMachineAndProcedures();
-      } catch (error) {
-        console.error('Failed to delete procedure:', error);
-      }
+      loadMachineAndProcedures();
     });
   };
-
+  
   
   const markComplete = async (proc) => {
+    addInAppLog(`[ACTION] markComplete() triggered for ${proc.id}`);
+
     try {
-      await wrapWithSync('markComplete', async () => {
-        const now = new Date();
-        const dueDate = new Date();
-        dueDate.setDate(now.getDate() + parseInt(proc.interval_days || 0));
-  
-        const session = await AsyncStorage.getItem('loginData');
-        const parsedSession = JSON.parse(session);
-  
-        const { error } = await supabase
-          .from('procedures')
-          .update({
-            last_completed: now.toISOString(),
-            due_date: dueDate.toISOString(),
-            completed_by: parsedSession?.userId,
-          })
-          .eq('id', proc.id);
-  
-        if (error) throw error;
-  
-        loadMachineAndProcedures();
+      const session = await AsyncStorage.getItem('loginData');
+      const parsedSession = JSON.parse(session);
+      const userId = parsedSession?.userId;
+      addInAppLog(`[MARK] Preparing to run tryNowOrQueue for ${proc.id}`);
+      await tryNowOrQueue('markProcedureComplete', {
+        procedureId: proc.id,
+        intervalDays: proc.interval_days,
+        userId,
+      }, {
+        attempts: 3,
+        delayMs: 1000,
       });
-     } catch (error) {
+  
+      loadMachineAndProcedures(); // ✅ Refresh view immediately
+    } catch (error) {
+      if (__DEV__) console.warn('[QUEUE ERROR] Failed to queue markComplete:', error);
     }
-  };
-            
+  };            
   
   const addProcedure = async () => {
     if (!name.trim() || !interval) return;
   
-    // 👇 Close modal first to allow SyncBanner to render
-    setModalVisible(false);
+    setModalVisible(false); // Close modal for feedback
   
-    await wrapWithSync('addProcedure', async () => {
-      try {
-        const session = await AsyncStorage.getItem('loginData');
-        const parsedSession = JSON.parse(session);
-        const companyId = parsedSession?.companyId;
+    try {
+      const session = await AsyncStorage.getItem('loginData');
+      const parsedSession = JSON.parse(session);
+      const companyId = parsedSession?.companyId;
   
-        if (!companyId) {
-          console.error('No companyId found for adding procedure.');
-          return;
-        }
+      const result = await tryNowOrQueue('addProcedure', {
+        machineId,
+        name: name.trim(),
+        description,
+        interval,
+        startingDate,
+        companyId,
+      });
   
-        const { error } = await supabase
-          .from('procedures')
-          .insert([{
-            machine_id: machineId,
-            procedure_name: name.trim(),
-            description,
-            interval_days: parseInt(interval),
-            last_completed: startingDate.toISOString(),
-            due_date: null,
-            image_urls: [],
-            company_id: companyId,
-          }]);
-  
-        if (error) {
-          console.error('Supabase insert error:', error.message);
-          return;
-        }
-  
-        setName('');
-        setInterval('');
-        setDescription('');
-        loadMachineAndProcedures();
-      } catch (error) {
-        console.error('Failed to add procedure:', error);
+      // ✅ Notify user if it was a duplicate
+      if (result === 'duplicate') {
+        Alert.alert('Duplicate Procedure', 'A procedure with that name already exists for this machine.');
+        return;
       }
-    });
+  
+      setName('');
+      setInterval('');
+      setDescription('');
+      loadMachineAndProcedures(); // Optional: may be redundant if job completes later
+    } catch (err) {
+      if (__DEV__) console.warn('[QUEUE ERROR] Failed to queue addProcedure:', err);
+    }
   };
-      
+            
   const renderProcedure = ({ item }) => (
     <ProcedureCard
       item={{ ...item, machineId }}
@@ -164,15 +166,17 @@ export default function MachineScreen() {
 
     
     <View style={styles.container}>
-      <StatusBar backgroundColor="#000" style="light" />
+    <StatusBar backgroundColor="#000" style="light" />
 
-      <Text style={styles.header}>{machine?.name}</Text>
+  <Text style={styles.header}>{machine?.name}</Text>
 
-      <FlatList
-        data={procedures.filter(p => !p.is_non_routine)}
-        keyExtractor={(item) => item.id.toString()}
-        renderItem={renderProcedure}
-      />
+
+  <FlatList
+    data={procedures.filter(p => !p.is_non_routine)}
+    keyExtractor={(item) => item.id.toString()}
+    renderItem={renderProcedure}
+    extraData={refreshKey}
+  />
 
       <TouchableOpacity style={styles.addBtn} onPress={() => setModalVisible(true)}>
         <Text style={styles.addBtnText}>+ Add Procedure</Text>
