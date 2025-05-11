@@ -13,7 +13,7 @@ import { StatusBar } from 'expo-status-bar';
 import LoginScreen from './screens/LoginScreen';
 import { AppContext } from './contexts/AppContext';
 import { SyncProvider, CombinedSyncBanner, FailedSyncBanner, SyncFailureModal } from './contexts/SyncContext';
-import { registerLogListener, unregisterLogListener, clearInAppLogs } from './utils/InAppLogger';
+import { registerLogListener, unregisterLogListener, clearInAppLogs, pushLogsToSupabase } from './utils/InAppLogger';
 
 // Screens
 import HomeScreen from './screens/HomeScreen';
@@ -44,15 +44,26 @@ function InAppLogger() {
 
   return (
     <View style={styles.logContainer}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 8 }}>
-        <TouchableOpacity onPress={() => setVisible(false)} style={styles.collapseButton}>
-          <Text style={styles.collapseText}>✖</Text>
-        </TouchableOpacity>
-  
-        <TouchableOpacity onPress={clearInAppLogs} style={styles.clearButton}>
-          <Text style={styles.clearText}>🧹</Text>
-        </TouchableOpacity>
-      </View>
+<View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 8 }}>
+  <TouchableOpacity onPress={() => setVisible(false)} style={styles.collapseButton}>
+    <Text style={styles.collapseText}>✖</Text>
+  </TouchableOpacity>
+
+  <View style={{ flexDirection: 'row', gap: 12 }}>
+    <TouchableOpacity onPress={clearInAppLogs} style={styles.clearButton}>
+      <Text style={styles.clearText}>🧹</Text>
+    </TouchableOpacity>
+
+    <TouchableOpacity
+      onPress={async () => {
+        await pushLogsToSupabase(logs, 'ManualPush', 'devkit');
+      }}
+      style={styles.clearButton}
+    >
+      <Text style={styles.clearText}>📤</Text>
+    </TouchableOpacity>
+  </View>
+</View>
   
       <ScrollView style={styles.logBox}>
         {logs.map((log, idx) => (

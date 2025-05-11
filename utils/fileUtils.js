@@ -8,7 +8,8 @@ import { Modal, View, Text, TextInput, TouchableOpacity, Image } from 'react-nat
 import { styles } from '../styles/globalStyles';
 import * as Linking from 'expo-linking';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { wrapWithSync } from './SyncManager';
+import { wrapWithSync, tryNowOrQueue } from './SyncManager';
+import { addInAppLog } from '../utils/InAppLogger';
 
 export function FileLabelPrompt({ visible, onSubmit, onCancel }) {
     const [label, setLabel] = useState('');
@@ -59,61 +60,43 @@ export function FileLabelPrompt({ visible, onSubmit, onCancel }) {
     label,
   }) {
     try {
-      await wrapWithSync('uploadProcedureFile', async () => {
-        const result = await DocumentPicker.getDocumentAsync({
-          type: 'application/pdf',
-          copyToCacheDirectory: true,
-          multiple: false,
-        });
-  
-        if (!result.canceled && result.assets?.length > 0) {
-          const file = result.assets[0];
-          const uri = file.uri;
-  
-          const sanitizedLabel = label?.trim().replace(/[^a-z0-9_\-]/gi, '_') || 'Untitled';
-          const fileName = `${sanitizedLabel}-${procedureId}-${Date.now()}.pdf`;
-          const uploadUrl = `${SUPABASE_URL}/storage/v1/object/${SUPABASE_BUCKET}/${fileName}`;
-  
-          const uploadResponse = await FileSystem.uploadAsync(uploadUrl, uri, {
-            httpMethod: 'PUT',
-            headers: {
-              'Authorization': `Bearer ${SUPABASE_KEY}`,
-              'Content-Type': 'application/pdf',
-              'x-upsert': 'true',
-            },
-            uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
-          });
-  
-          if (uploadResponse.status !== 200) {
-            throw new Error(`Upload failed with status ${uploadResponse.status}`);
-          }
-  
-          const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_BUCKET}/${fileName}`;
-          const updatedUrls = [...(fileUrls || []), publicUrl];
-          const updatedLabels = [...(fileLabels || []), sanitizedLabel];
-  
-          setFileUrls(updatedUrls);
-          setFileLabels(updatedLabels);
-  
-          const { error: patchError } = await supabase
-            .from('procedures')
-            .update({
-              file_urls: updatedUrls,
-              file_labels: updatedLabels,
-            })
-            .eq('id', procedureId);
-  
-          if (patchError) throw patchError;
-  
-          setTimeout(() => {
-            if (scrollToEnd) scrollToEnd();
-          }, 300);
-        }
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'application/pdf',
+        copyToCacheDirectory: true,
+        multiple: false,
       });
-     } catch (err) {
+  
+      if (!result.canceled && result.assets?.length > 0) {
+        const file = result.assets[0];
+        const localUri = file.uri;
+  
+        const sanitizedLabel = label?.trim().replace(/[^a-z0-9_\-]/gi, '_') || 'Untitled';
+        const fileName = `${sanitizedLabel}-${procedureId}-${Date.now()}.pdf`;
+  
+        // ✅ Optimistically update local gallery
+        const updatedUrls = [...(fileUrls || []), localUri];
+        const updatedLabels = [...(fileLabels || []), sanitizedLabel];
+  
+        setFileUrls(updatedUrls);
+        setFileLabels(updatedLabels);
+  
+        if (scrollToEnd) {
+          setTimeout(scrollToEnd, 300);
+        }
+  
+        // 🧠 Queue upload job
+        await tryNowOrQueue('uploadProcedureFile', {
+          localUri,
+          label: sanitizedLabel,
+          procedureId,
+          fileName,
+        }, { attempts: 3, delayMs: 1000 });
+      }
+    } catch (err) {
+      console.error('File selection or queuing failed:', err);
     }
   }
-  
+    
 
 export async function deleteProcedureFile({
   uriToDelete,
@@ -157,7 +140,80 @@ export async function deleteProcedureFile({
     console.error('Failed to delete file:', error);
   }
 }
-          
+ 
+export async function uploadFileToSupabase({ localUri, label, procedureId, fileName }) {
+  const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_BUCKET}/${fileName}`;
+
+  // ✅ Check if local file exists before upload
+  const fileInfo = await FileSystem.getInfoAsync(localUri);
+  if (!fileInfo.exists) {
+    addInAppLog(`[SKIP] Local file not found—uploadProcedureFile aborted: ${localUri}`);
+    return;
+  }
+
+  // 🔐 Prevent duplicate insert
+  const { data: procDataCheck, error: checkError } = await supabase
+    .from('procedures')
+    .select('file_urls, file_labels')
+    .eq('id', procedureId)
+    .single();
+
+  if (checkError) throw checkError;
+  if (procDataCheck?.file_urls?.includes(publicUrl)) {
+    addInAppLog(`[UPLOAD] File already exists in DB, skipping: ${publicUrl}`);
+    return;
+  }
+
+  try {
+    const uploadUrl = `${SUPABASE_URL}/storage/v1/object/${SUPABASE_BUCKET}/${fileName}`;
+    const result = await FileSystem.uploadAsync(uploadUrl, localUri, {
+      httpMethod: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/pdf',
+      },
+      uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+    });
+
+    if (result.status !== 200) {
+      addInAppLog(`[UPLOAD RETRY] HTTP ${result.status} for ${fileName}`);
+      throw new Error('Supabase upload failed');
+    }
+
+    const { file_urls = [], file_labels = [] } = procDataCheck;
+    const updatedUrls = [...file_urls, publicUrl];
+    const updatedLabels = [...file_labels, label];
+
+    const { error: updateError } = await supabase
+      .from('procedures')
+      .update({
+        file_urls: updatedUrls,
+        file_labels: updatedLabels,
+      })
+      .eq('id', procedureId);
+
+    if (updateError) throw updateError;
+
+    addInAppLog(`[UPLOAD] File uploaded and database updated: ${publicUrl}`);
+    
+    
+    // 🧹 Clean up local file after successful upload
+    if (localUri.startsWith('file://')) {
+      try {
+        await FileSystem.deleteAsync(localUri, { idempotent: true });
+        addInAppLog(`[CLEANUP] Deleted local file after upload: ${localUri}`);
+      } catch (cleanupError) {
+        addInAppLog(`[CLEANUP FAIL] Could not delete local file: ${cleanupError.message}`);
+      }
+    }
+
+  
+  } catch (error) {
+    addInAppLog(`[QUEUE RETRY] File upload will retry later: ${error.message}`);
+    throw error;
+  }
+}
+
 
 export function AttachmentGridViewer({
     imageUrls,

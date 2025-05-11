@@ -58,6 +58,15 @@ export async function tryNowOrQueue(label, payload, { attempts = 3, delayMs = 30
       const result = await executor(payload); // 👈 capture and return result
       addInAppLog(`[SYNC] Job ${label} succeeded on attempt ${i + 1}`);
       notifyJobComplete(label, payload);
+     
+      // ✅ Remove any matching job from queue
+const jobs = await loadJobs();
+const match = jobs.find(j => j.label === label && JSON.stringify(j.payload) === JSON.stringify(payload));
+if (match) {
+  await removeJob(match.id);
+  addInAppLog(`[QUEUE] Removed job after success: ${label}`);
+}
+
       return result; // ✅ now MachineScreen gets 'duplicate'
     } catch (err) {
       console.warn(`[SYNC] Attempt ${i + 1} failed for ${label}`, err);

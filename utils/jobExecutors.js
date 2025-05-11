@@ -1,4 +1,5 @@
 import { uploadImageToSupabase } from './imageUtils';
+import { uploadFileToSupabase } from './fileUtils';
 import { SUPABASE_URL, SUPABASE_BUCKET, SUPABASE_KEY, supabase } from './supaBaseConfig';
 import { addInAppLog } from '../utils/InAppLogger';
 import * as FileSystem from 'expo-file-system';
@@ -11,6 +12,12 @@ export const jobExecutors = {
     console.log('[EXECUTOR] Upload complete');
   },
 
+  uploadProcedureFile: async (payload) => {
+    console.log('[EXECUTOR] Uploading file via Supabase:', payload.localUri);
+    await uploadFileToSupabase(payload);
+    console.log('[EXECUTOR] Upload complete');
+  },
+  
   updateProcedureSettings: async ({ procedureId, intervalDays, selectedDate, userId }) => {
     console.log('[EXECUTOR] Received payload:', { procedureId, intervalDays, selectedDate, userId });
 
