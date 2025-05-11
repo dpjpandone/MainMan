@@ -43,6 +43,16 @@ export async function wrapWithSync(label, fn) {
 
 
 
+/**
+ * Attempts to run a job immediately, falling back to queue if it fails.
+ *
+ * @param {string} label - The job label (e.g. 'uploadProcedureFile').
+ * @param {object} payload - The job-specific input data.
+ * @param {object} [options] - Optional config for retries.
+ * @param {number} [options.attempts=3] - Number of retry attempts before queuing.
+ * @param {number} [options.delayMs=3000] - Delay between retry attempts (ms).
+ * @returns {Promise<*>} The result from the executor on success, or null if queued.
+ */
 export async function tryNowOrQueue(label, payload, { attempts = 3, delayMs = 3000 } = {}) {
   const executor = jobExecutors[label];
 
@@ -51,49 +61,63 @@ export async function tryNowOrQueue(label, payload, { attempts = 3, delayMs = 30
     return;
   }
 
-
   for (let i = 0; i < attempts; i++) {
     try {
       addInAppLog(`[SYNC] Attempt ${i + 1} for ${label}`);
-      const result = await executor(payload); // 👈 capture and return result
+      const result = await executor(payload);
       addInAppLog(`[SYNC] Job ${label} succeeded on attempt ${i + 1}`);
       notifyJobComplete(label, payload);
-     
-      // ✅ Remove any matching job from queue
-const jobs = await loadJobs();
-const match = jobs.find(j => j.label === label && JSON.stringify(j.payload) === JSON.stringify(payload));
-if (match) {
-  await removeJob(match.id);
-  addInAppLog(`[QUEUE] Removed job after success: ${label}`);
-}
 
-      return result; // ✅ now MachineScreen gets 'duplicate'
+      // ✅ Remove any matching job from queue
+      const jobs = await loadJobs();
+
+      // 🧹 Check for completed match and remove from queue
+      const match = jobs.find(
+        (j) => j.label === label && JSON.stringify(j.payload) === JSON.stringify(payload)
+      );
+
+      if (match) {
+        await removeJob(match.id);
+        addInAppLog(`[QUEUE] Removed job after success: ${label}`);
+      }
+
+      // 📊 Count remaining queued jobs using the same list
+      const queuedCount = jobs.filter((j) => j.status === 'queued').length;
+      addInAppLog(`[QUEUE] Queued job count: ${queuedCount}`);
+      setGlobalQueuedJobCount(queuedCount);
+
+      return result; // ✅ Must return result after success
     } catch (err) {
       console.warn(`[SYNC] Attempt ${i + 1} failed for ${label}`, err);
       if (i < attempts - 1) {
-        await new Promise(res => setTimeout(res, delayMs));
+        await new Promise((res) => setTimeout(res, delayMs));
       }
     }
   }
-  
+
+  // 💾 After all retries fail, persist the job if not already queued
+  const existing = (await loadJobs()).find(
+    j => j.label === label && JSON.stringify(j.payload) === JSON.stringify(payload)
+  );
+
+  if (existing) {
+    addInAppLog(`[QUEUE] Job already queued: ${label}`);
+    return null;
+  }
+
   await addJob(label, payload);
   addInAppLog(`[QUEUE] Queued job: ${label}`);
 
   const jobs = await loadJobs();
-  addInAppLog(`[QUEUE] Queued job count: ${jobs.filter(j => j.status === 'queued').length}`);
+  const queuedCount = jobs.filter((j) => j.status === 'queued').length;
+  addInAppLog(`[QUEUE] Queued job count: ${queuedCount}`);
+  setGlobalQueuedJobCount(queuedCount);
 
-  setGlobalQueuedJobCount(jobs.filter(j => j.status === 'queued').length);
-
+  return null;
 }
-
 
 const refreshCallbacks = new Set();
 
-/**
- * Subscribe to job completion events.
- * @param {function} callback - A function to run after a job completes.
- * @returns {function} A cleanup function to unsubscribe the callback.
- */
 export function subscribeToJobComplete(callback) {
   if (typeof callback === 'function') {
     addInAppLog('[SUBSCRIBE] Listener registered');

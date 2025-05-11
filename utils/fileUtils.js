@@ -90,7 +90,7 @@ export function FileLabelPrompt({ visible, onSubmit, onCancel }) {
           label: sanitizedLabel,
           procedureId,
           fileName,
-        }, { attempts: 3, delayMs: 1000 });
+        });
       }
     } catch (err) {
       console.error('File selection or queuing failed:', err);

@@ -9,6 +9,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { wrapWithSync, tryNowOrQueue } from './SyncManager';
 import { addJob, loadJobs, removeJob } from './JobQueue';
+import { addInAppLog } from '../utils/InAppLogger';
 
 export function FullscreenImageViewerController({ imageUrls }) {
   const [selectedImageIndex, setSelectedImageIndex] = useState(null);
@@ -205,28 +206,33 @@ export async function handleImageSelection({ procedureId, imageUrls, setImageUrl
 
     const asset = result.assets[0];
     const localUri = asset.uri;
+    addInAppLog(`[SELECTED] New image picked: ${localUri}`);
+
     const fileName = `${procedureId}-${Date.now()}.jpg`;
 
     // 1. Optimistically add local image to gallery
     const updated = [...imageUrls, localUri];
     setImageUrls(updated);
 
-await tryNowOrQueue('uploadProcedureImage', {
-  localUri,
-  procedureId,
-  fileName,
-}, { attempts: 3, delayMs: 1000 });
+    await tryNowOrQueue('uploadProcedureImage', {
+      localUri,
+      procedureId,
+      fileName,
+    });
 
+    addInAppLog(`[QUEUE ATTEMPT] Image queued or executed: ${fileName}`);
+
+    
 loadJobs().then(jobs => {
   const count = jobs.filter(j => j.label === 'uploadProcedureImage').length;
-  console.log('[DEBUG] Total queued image uploads:', count);
+  addInAppLog(`[DEBUG] Total queued image uploads: ${count}`);
 });
 
     if (scrollToEnd) {
       setTimeout(scrollToEnd, 300);
     }
   } catch (error) {
-    console.error('Image selection or queuing failed:', error);
+    addInAppLog(`[ERROR] Image selection or queuing failed: ${error.message}`);
   }
 }
 
@@ -243,7 +249,7 @@ export async function uploadImageToSupabase({ localUri, procedureId, fileName })
   if (checkError) throw checkError;
 
   if (procDataCheck?.image_urls?.includes(publicUrl)) {
-    console.log('[UPLOAD] Image already exists in DB, skipping duplicate.');
+    addInAppLog(`[UPLOAD] Image already exists in DB, skipping duplicate.`);
     return;
   }
 
@@ -260,10 +266,10 @@ export async function uploadImageToSupabase({ localUri, procedureId, fileName })
     });
 
     if (result.status !== 200) {
-      console.warn(`[UPLOAD RETRY] HTTP ${result.status} for ${fileName}`);
+      addInAppLog(`[UPLOAD RETRY] HTTP ${result.status} for ${fileName}`);
       throw new Error('Supabase upload failed');
     }
-    
+
     const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_BUCKET}/${fileName}`;
 
     const { data: procData, error: fetchError } = await supabase
@@ -274,22 +280,33 @@ export async function uploadImageToSupabase({ localUri, procedureId, fileName })
 
     if (fetchError) throw fetchError;
 
-// Avoid adding publicUrl if it already exists (idempotent)
-const current = procData?.image_urls || [];
-const updated = current.includes(publicUrl)
-  ? current
-  : [...current, publicUrl];
+    // Avoid adding publicUrl if it already exists (idempotent)
+    const current = procData?.image_urls || [];
+    const updated = current.includes(publicUrl)
+      ? current
+      : [...current, publicUrl];
 
-const { error: updateError } = await supabase
-  .from('procedures')
-  .update({ image_urls: updated })
-  .eq('id', procedureId);
+    const { error: updateError } = await supabase
+      .from('procedures')
+      .update({ image_urls: updated })
+      .eq('id', procedureId);
 
     if (updateError) throw updateError;
 
-    console.log('[UPLOAD] Image uploaded and database updated:', publicUrl);
+    addInAppLog(`[UPLOAD] Image uploaded and database updated: ${publicUrl}`);
+
+    // 🧹 Clean up local image after successful upload
+    if (localUri.startsWith('file://')) {
+      try {
+        await FileSystem.deleteAsync(localUri, { idempotent: true });
+        addInAppLog(`[CLEANUP] Deleted local image after upload: ${localUri}`);
+      } catch (cleanupError) {
+        addInAppLog(`[CLEANUP FAIL] Could not delete local image: ${cleanupError.message}`);
+      }
+    }
+
   } catch (error) {
-    console.warn('[QUEUE RETRY] Image upload will retry later:', error.message);
+    addInAppLog(`[QUEUE RETRY] Image upload will retry later: ${error.message}`);
     throw error;
   }
 }

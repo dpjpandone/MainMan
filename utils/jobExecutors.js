@@ -2,25 +2,32 @@ import { uploadImageToSupabase } from './imageUtils';
 import { uploadFileToSupabase } from './fileUtils';
 import { SUPABASE_URL, SUPABASE_BUCKET, SUPABASE_KEY, supabase } from './supaBaseConfig';
 import { addInAppLog } from '../utils/InAppLogger';
-import * as FileSystem from 'expo-file-system';
-import * as DocumentPicker from 'expo-document-picker';
 
 export const jobExecutors = {
   uploadProcedureImage: async (payload) => {
-    console.log('[EXECUTOR] Uploading image via Supabase:', payload.localUri);
-    await uploadImageToSupabase(payload);
-    console.log('[EXECUTOR] Upload complete');
+    addInAppLog(`[EXECUTOR] Starting image upload: ${payload.localUri}`);
+    try {
+      await uploadImageToSupabase(payload);
+      addInAppLog(`[EXECUTOR] Image uploaded successfully: ${payload.localUri}`);
+    } catch (err) {
+      addInAppLog(`[EXECUTOR] Image upload failed: ${err.message}`);
+      throw err;
+    }
   },
 
   uploadProcedureFile: async (payload) => {
-    console.log('[EXECUTOR] Uploading file via Supabase:', payload.localUri);
-    await uploadFileToSupabase(payload);
-    console.log('[EXECUTOR] Upload complete');
+    addInAppLog(`[EXECUTOR] Starting file upload: ${payload.localUri}`);
+    try {
+      await uploadFileToSupabase(payload);
+      addInAppLog(`[EXECUTOR] File uploaded successfully: ${payload.localUri}`);
+    } catch (err) {
+      addInAppLog(`[EXECUTOR] File upload failed: ${err.message}`);
+      throw err;
+    }
   },
-  
-  updateProcedureSettings: async ({ procedureId, intervalDays, selectedDate, userId }) => {
-    console.log('[EXECUTOR] Received payload:', { procedureId, intervalDays, selectedDate, userId });
 
+  updateProcedureSettings: async ({ procedureId, intervalDays, selectedDate, userId }) => {
+    addInAppLog(`[EXECUTOR] Updating procedure settings: ${procedureId}`);
     const body = {
       interval_days: parseInt(intervalDays),
       last_completed: selectedDate ? new Date(selectedDate).toISOString() : null,
@@ -32,13 +39,17 @@ export const jobExecutors = {
       .update(body)
       .eq('id', procedureId);
 
-    if (error) throw error;
+    if (error) {
+      addInAppLog(`[EXECUTOR] Failed to update settings: ${error.message}`);
+      throw error;
+    }
 
-    console.log('[QUEUE EXEC] Updated procedure settings:', procedureId);
+    addInAppLog(`[EXECUTOR] Procedure settings updated: ${procedureId}`);
   },
 
-
   markProcedureComplete: async ({ procedureId, intervalDays, userId }) => {
+    addInAppLog(`[EXECUTOR] Marking procedure complete: ${procedureId}`);
+
     const now = new Date();
     const dueDate = new Date();
     dueDate.setDate(now.getDate() + parseInt(intervalDays || 0));
@@ -52,12 +63,17 @@ export const jobExecutors = {
       })
       .eq('id', procedureId);
 
-    if (error) throw error;
+    if (error) {
+      addInAppLog(`[EXECUTOR] Failed to mark complete: ${error.message}`);
+      throw error;
+    }
 
-    console.log('[QUEUE EXEC] Marked procedure complete:', procedureId);
+    addInAppLog(`[EXECUTOR] Procedure marked complete: ${procedureId}`);
   },
 
   saveProcedureDescription: async ({ procedureId, description, imageUrls, fileUrls, fileLabels }) => {
+    addInAppLog(`[EXECUTOR] Saving description for: ${procedureId}`);
+
     const { error } = await supabase
       .from('procedures')
       .update({
@@ -78,7 +94,6 @@ export const jobExecutors = {
 
   addProcedure: async ({ machineId, name, description, interval, startingDate, companyId }) => {
     addInAppLog(`[EXECUTOR] Attempting to add procedure: ${name}`);
-
     addInAppLog(`[EXECUTOR] Payload = ${JSON.stringify({
       machineId,
       name,
@@ -119,4 +134,3 @@ export const jobExecutors = {
     }
   },
 };
-     
