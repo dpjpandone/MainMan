@@ -1,14 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  StyleSheet,
-  Modal,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  Alert,
-  ScrollView,
-} from 'react-native';
+import { View, StyleSheet, Modal, Text, TextInput, TouchableOpacity, Alert, ScrollView } from 'react-native';
 import { Calendar } from 'react-native-calendars';
 import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -74,11 +65,12 @@ export default function MasterCalendarScreen() {
 
   const scheduleProcedure = async () => {
     console.log('--- Schedule Button Pressed ---');
+  
     if (!selectedDate || !machineName.trim() || !procedureName.trim() || !companyId) {
       Alert.alert('Missing Info', 'Please complete all fields including company ID.');
       return;
     }
-
+  
     const payload = {
       company_id: companyId,
       machine_name: machineName.trim(),
@@ -86,21 +78,43 @@ export default function MasterCalendarScreen() {
       description: procedureDescription.trim() || 'Scheduled from calendar',
       due_date: selectedDate,
     };
-
+  
+    // 🔄 Optimistically close modal and update local state
+    setModalVisible(false);
+    setMachineName('');
+    setProcedureName('');
+    setProcedureDescription('');
+  
+    // 🔁 Optimistically inject a new local copy (optional, explained below)
+    const tempDue = new Date(selectedDate);
+    const isoDate = tempDue.toISOString().split('T')[0];
+    const diffDays = Math.floor((tempDue - new Date()) / (1000 * 60 * 60 * 24));
+    const tempColor = diffDays < 0 ? 'red' : diffDays < 30 ? 'orange' : 'blue';
+  
+    const optimisticProc = {
+      id: Date.now(), // temp ID to silence key warning
+      ...payload,
+      dueDate: tempDue,
+      color: tempColor,
+      status: diffDays < 0 ? 'Past Due' : `Due in ${diffDays} days`,
+    };
+  
+    setNonRoutineProcedures((prev) => [...prev, optimisticProc]);
+    setMarkedDates((prev) => ({
+      ...prev,
+      [isoDate]: { selected: true, selectedColor: tempColor },
+    }));
+  
     try {
       await tryNowOrQueue('scheduleProcedure', payload);
       console.log('Non-routine procedure queued or inserted successfully');
-      setModalVisible(false);
-      setMachineName('');
-      setProcedureName('');
-      setProcedureDescription('');
-      loadNonRoutineProcedures(companyId);
+      // Note: Actual refresh is handled by `subscribeToJobComplete`
     } catch (error) {
       console.error('Unexpected error during schedule:', error);
       Alert.alert('Error', 'Something went wrong during scheduling.');
     }
   };
-
+  
   const deleteNonRoutineProcedure = async (id) => {
     Alert.alert(
       'Delete Procedure',
@@ -111,23 +125,29 @@ export default function MasterCalendarScreen() {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
+            // Optimistically remove it from the local list
+            const updatedList = nonRoutineProcedures.filter((item) => item.id !== id);
+            setNonRoutineProcedures(updatedList);
+  
             try {
               await tryNowOrQueue('deleteNonRoutineProcedure', {
                 id,
                 company_id: companyId,
               });
               console.log('Non-routine procedure deletion triggered');
-              loadNonRoutineProcedures(companyId);
+              // Refresh will be handled by subscribeToJobComplete
             } catch (error) {
               console.error('Unexpected error during delete:', error);
               Alert.alert('Error', 'Something went wrong during delete.');
+              // Revert if needed
+              setNonRoutineProcedures(nonRoutineProcedures);
             }
           },
         },
       ]
     );
   };
-
+  
   useEffect(() => {
     const init = async () => {
       console.log('Initializing MasterCalendarScreen...');
