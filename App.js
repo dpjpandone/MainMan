@@ -6,14 +6,15 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity  } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+
 import LoginScreen from './screens/LoginScreen';
 import { AppContext } from './contexts/AppContext';
 import { SyncProvider, CombinedSyncBanner, FailedSyncBanner, SyncFailureModal } from './contexts/SyncContext';
-import { registerLogListener, unregisterLogListener, clearInAppLogs, pushLogsToSupabase } from './utils/InAppLogger';
+import { registerLogListener, unregisterLogListener, clearInAppLogs, pushLogsToSupabase, LOGGING_ENABLED } from './utils/InAppLogger';
 
 // Screens
 import HomeScreen from './screens/HomeScreen';
@@ -27,6 +28,7 @@ function InAppLogger() {
   const [visible, setVisible] = useState(true);
 
   useEffect(() => {
+    if (!LOGGING_ENABLED) return;
     registerLogListener(setLogs);
     return () => unregisterLogListener();
   }, []);
@@ -44,27 +46,27 @@ function InAppLogger() {
 
   return (
     <View style={styles.logContainer}>
-<View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 8 }}>
-  <TouchableOpacity onPress={() => setVisible(false)} style={styles.collapseButton}>
-    <Text style={styles.collapseText}>✖</Text>
-  </TouchableOpacity>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 8 }}>
+        <TouchableOpacity onPress={() => setVisible(false)} style={styles.collapseButton}>
+          <Text style={styles.collapseText}>✖</Text>
+        </TouchableOpacity>
 
-  <View style={{ flexDirection: 'row', gap: 12 }}>
-    <TouchableOpacity onPress={clearInAppLogs} style={styles.clearButton}>
-      <Text style={styles.clearText}>🧹</Text>
-    </TouchableOpacity>
+        <View style={{ flexDirection: 'row', gap: 12 }}>
+          <TouchableOpacity onPress={clearInAppLogs} style={styles.clearButton}>
+            <Text style={styles.clearText}>🧹</Text>
+          </TouchableOpacity>
 
-    <TouchableOpacity
-      onPress={async () => {
-        await pushLogsToSupabase(logs, 'ManualPush', 'devkit');
-      }}
-      style={styles.clearButton}
-    >
-      <Text style={styles.clearText}>📤</Text>
-    </TouchableOpacity>
-  </View>
-</View>
-  
+          <TouchableOpacity
+            onPress={async () => {
+              await pushLogsToSupabase(logs, 'ManualPush', 'devkit');
+            }}
+            style={styles.clearButton}
+          >
+            <Text style={styles.clearText}>📤</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
       <ScrollView style={styles.logBox}>
         {logs.map((log, idx) => (
           <Text key={idx} style={styles.logText}>{log}</Text>
@@ -72,7 +74,7 @@ function InAppLogger() {
       </ScrollView>
     </View>
   );
-  }
+}
 
 // Navigators
 const Tab = createBottomTabNavigator();
@@ -160,7 +162,7 @@ export default function App() {
             <CombinedSyncBanner />
             <FailedSyncBanner />
             <SyncFailureModal />
-        <InAppLogger />
+            {LOGGING_ENABLED && <InAppLogger />}
           </GestureHandlerRootView>
         </SafeAreaProvider>
       </SyncProvider>
@@ -181,29 +183,24 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     zIndex: 9999,
   },
-  
   logBox: {
     flex: 1,
   },
-  
   logText: {
     color: '#0f0',
     fontSize: 10,
     fontFamily: 'Courier',
   },
-  
   collapseButton: {
     position: 'absolute',
     top: 2,
     right: 4,
     zIndex: 1,
   },
-  
   collapseText: {
     color: '#f00',
     fontSize: 14,
   },
-  
   toggleButton: {
     position: 'absolute',
     bottom: 8,
@@ -216,9 +213,8 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     zIndex: 9999,
   },
-  
   toggleText: {
     color: '#0f0',
     fontSize: 16,
-  }
-  });
+  },
+});
