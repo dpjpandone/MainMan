@@ -4,6 +4,44 @@ import { SUPABASE_URL, SUPABASE_BUCKET, SUPABASE_KEY, supabase } from './supaBas
 import { addInAppLog } from '../utils/InAppLogger';
 
 export const jobExecutors = {
+  scheduleProcedure: async (payload) => {
+    const { company_id, machine_name, procedure_name, description, due_date } = payload;
+    addInAppLog(`[EXECUTOR] Scheduling procedure: ${procedure_name} for ${machine_name} on ${due_date}`);
+  
+    const { error } = await supabase
+      .from('non_routine_procedures')
+      .insert([{
+        company_id,
+        machine_name,
+        procedure_name,
+        description,
+        due_date,
+      }]);
+  
+    if (error) {
+      addInAppLog(`[EXECUTOR] Failed to schedule procedure: ${error.message}`);
+      throw error;
+    }
+  
+    addInAppLog(`[EXECUTOR] Procedure scheduled: ${procedure_name}`);
+  },
+  deleteNonRoutineProcedure: async ({ id, company_id }) => {
+    addInAppLog(`[EXECUTOR] Deleting procedure ID ${id} (company ${company_id})`);
+  
+    const { error } = await supabase
+      .from('non_routine_procedures')
+      .delete()
+      .eq('id', id)
+      .eq('company_id', company_id);
+  
+    if (error) {
+      addInAppLog(`[EXECUTOR] Failed to delete procedure: ${error.message}`);
+      throw error;
+    }
+  
+    addInAppLog(`[EXECUTOR] Procedure deleted: ID ${id}`);
+  },
+  
   uploadProcedureImage: async (payload) => {
     addInAppLog(`[EXECUTOR] Starting image upload: ${payload.localUri}`);
     try {

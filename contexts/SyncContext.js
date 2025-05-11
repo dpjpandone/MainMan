@@ -5,6 +5,8 @@ import { jobExecutors } from '../utils/jobExecutors';
 import NetInfo from '@react-native-community/netinfo';
 import { addInAppLog } from '../utils/InAppLogger';
 import { notifyJobComplete } from '../utils/SyncManager';
+import debounce from 'lodash.debounce'; 
+import { runSyncQueue } from '../utils/SyncManager';
 
 // Global setters (used outside component scope)
 export let setGlobalSyncing = () => {};
@@ -41,14 +43,16 @@ export const SyncProvider = ({ children }) => {
       }
     });
   
-    const netInfoUnsubscribe = NetInfo.addEventListener(state => {
+    const debouncedRunSync = debounce((state) => {
       addInAppLog(`[TRIGGER] NetInfo: isConnected = ${state.isConnected}`);
       if (state.isConnected) {
         addInAppLog('[TRIGGER] Network reconnected — running sync queue');
         runSyncQueue();
       }
-    });
-  
+    }, 500);
+    
+    const netInfoUnsubscribe = NetInfo.addEventListener(debouncedRunSync);
+      
     return () => {
       appStateListener.remove();
       netInfoUnsubscribe();
@@ -179,62 +183,6 @@ export function SyncFailureModal() {
   );
 }
 
-// ---------------------------
-// QUEUE RUNNER
-// ---------------------------
-export async function runSyncQueue() {
-  addInAppLog('[RUNNER] runSyncQueue() triggered'); // 🔍 proves queue fired
-
-  await new Promise(res => setTimeout(res, 2000));
-  const jobs = await loadJobs();
-  addInAppLog(`[RUNNER] Loaded jobs: ${jobs.length}`);
-
-  for (const job of jobs) {
-    if (!shouldRetry(job)) {
-      addInAppLog(`[RUNNER] Skipped job ${job.id} (${job.label}) — not retryable`);
-      continue;
-    }
-
-    try {
-      addInAppLog(`[RUNNER] Executing job ${job.id} (${job.label})`);
-      const executor = jobExecutors[job.label];
-      if (!executor) throw new Error(`No executor for label: ${job.label}`);
-
-      await executor(job.payload);
-      addInAppLog(`[RUNNER] Executor finished: ${job.label}`);
-
-      await removeJob(job.id);
-      addInAppLog(`[RUNNER] Job removed from queue: ${job.id}`);
-
-      notifyJobComplete(job.label, job.payload);
-      addInAppLog(`[RUNNER] notifyJobComplete() fired for: ${job.label}`);
-    } catch (err) {
-      addInAppLog(`[RUNNER] Job ${job.id} failed: ${err?.message || err}`);
-      await incrementRetry(job.id);
-
-      if (job.attemptCount + 1 >= 5) {
-        await markJobAsFailed(job.id);
-        addInAppLog(`[RUNNER] Job ${job.id} permanently failed`);
-      }
-    }
-  }
-
-  const updatedJobs = await loadJobs();
-  const remaining = updatedJobs.filter(j => j.status === 'queued').length;
-  setGlobalQueuedJobCount(remaining);
-  addInAppLog(`[RUNNER] Remaining queued jobs: ${remaining}`);
-}
-
-function shouldRetry(job) {
-  if (job.status === 'done' || job.status === 'failed') return false;
-  if (job.attemptCount >= 5) return false;
-
-  const baseDelay = 3000;
-  const delay = baseDelay * Math.pow(2, job.attemptCount);
-  const timeSinceLast = Date.now() - job.lastAttempt;
-
-  return timeSinceLast >= delay;
-}
 
 ///COMBINED SYNC BANNER///
 export function CombinedSyncBanner() {

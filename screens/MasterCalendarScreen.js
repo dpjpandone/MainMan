@@ -14,7 +14,7 @@ import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { styles } from '../styles/globalStyles';
 import { supabase } from '../utils/supaBaseConfig';
-import { wrapWithSync } from '../utils/SyncManager';
+import { wrapWithSync, tryNowOrQueue, subscribeToJobComplete } from '../utils/SyncManager';
 
 export default function MasterCalendarScreen() {
   const [selectedDate, setSelectedDate] = useState(null);
@@ -37,16 +37,16 @@ export default function MasterCalendarScreen() {
           .select('*')
           .eq('company_id', companyId)
           .order('due_date', { ascending: true });
-  
+
         if (error) throw error;
-  
+
         const now = new Date();
         const marks = {};
         const enriched = data.map((proc) => {
           const due = new Date(proc.due_date);
           const isoDate = due.toISOString().split('T')[0];
           const diffDays = Math.floor((due - now) / (1000 * 60 * 60 * 24));
-  
+
           let color = 'blue';
           let status = `Due in ${diffDays} days`;
           if (diffDays < 0) {
@@ -55,15 +55,15 @@ export default function MasterCalendarScreen() {
           } else if (diffDays < 30) {
             color = 'orange';
           }
-  
+
           marks[isoDate] = {
             selected: true,
             selectedColor: color,
           };
-  
+
           return { ...proc, dueDate: due, color, status };
         });
-  
+
         setMarkedDates(marks);
         setNonRoutineProcedures(enriched);
       });
@@ -71,14 +71,14 @@ export default function MasterCalendarScreen() {
       console.error('Error fetching non-routine procedures:', error);
     }
   };
-        
+
   const scheduleProcedure = async () => {
     console.log('--- Schedule Button Pressed ---');
     if (!selectedDate || !machineName.trim() || !procedureName.trim() || !companyId) {
       Alert.alert('Missing Info', 'Please complete all fields including company ID.');
       return;
     }
-  
+
     const payload = {
       company_id: companyId,
       machine_name: machineName.trim(),
@@ -86,28 +86,21 @@ export default function MasterCalendarScreen() {
       description: procedureDescription.trim() || 'Scheduled from calendar',
       due_date: selectedDate,
     };
-  
+
     try {
-      await wrapWithSync('scheduleProcedure', async () => {
-        const { error } = await supabase
-          .from('non_routine_procedures')
-          .insert([payload]);
-  
-        if (error) throw error;
-      });
-  
-      console.log('Non-routine procedure inserted successfully');
+      await tryNowOrQueue('scheduleProcedure', payload);
+      console.log('Non-routine procedure queued or inserted successfully');
       setModalVisible(false);
       setMachineName('');
       setProcedureName('');
       setProcedureDescription('');
       loadNonRoutineProcedures(companyId);
     } catch (error) {
-      console.error('Unexpected error during insert:', error);
+      console.error('Unexpected error during schedule:', error);
       Alert.alert('Error', 'Something went wrong during scheduling.');
     }
   };
-    
+
   const deleteNonRoutineProcedure = async (id) => {
     Alert.alert(
       'Delete Procedure',
@@ -119,17 +112,11 @@ export default function MasterCalendarScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await wrapWithSync('deleteNonRoutineProcedure', async () => {
-                const { error } = await supabase
-                  .from('non_routine_procedures')
-                  .delete()
-                  .eq('id', id)
-                  .eq('company_id', companyId);
-  
-                if (error) throw error;
+              await tryNowOrQueue('deleteNonRoutineProcedure', {
+                id,
+                company_id: companyId,
               });
-  
-              console.log('Procedure deleted successfully');
+              console.log('Non-routine procedure deletion triggered');
               loadNonRoutineProcedures(companyId);
             } catch (error) {
               console.error('Unexpected error during delete:', error);
@@ -140,16 +127,13 @@ export default function MasterCalendarScreen() {
       ]
     );
   };
-        
+
   useEffect(() => {
     const init = async () => {
       console.log('Initializing MasterCalendarScreen...');
       const session = await AsyncStorage.getItem('loginData');
-      console.log('Raw loginData from AsyncStorage:', session);
       const parsed = JSON.parse(session);
-      console.log('Parsed loginData:', parsed);
       const id = parsed?.companyId;
-      console.log('Extracted companyId:', id);
       if (id) {
         setCompanyId(id);
         loadNonRoutineProcedures(id);
@@ -169,6 +153,21 @@ export default function MasterCalendarScreen() {
     });
     return unsubscribe;
   }, [navigation, companyId]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToJobComplete((label, payload) => {
+      if (
+        label === 'scheduleProcedure' ||
+        label === 'deleteNonRoutineProcedure'
+      ) {
+        if (companyId) {
+          loadNonRoutineProcedures(companyId);
+        }
+      }
+    });
+    return unsubscribe;
+  }, [companyId]);
+
 
   return (
 <View style={styles.container}>
