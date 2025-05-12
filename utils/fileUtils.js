@@ -3,9 +3,9 @@
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import { SUPABASE_URL, SUPABASE_BUCKET, SUPABASE_KEY, supabase } from './supaBaseConfig';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Modal, View, Text, TextInput, TouchableOpacity, Image } from 'react-native';
-import { styles } from '../styles/globalStyles';
+import { styles, PendingHourglass } from '../styles/globalStyles';
 import * as Linking from 'expo-linking';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { wrapWithSync, tryNowOrQueue } from './SyncManager';
@@ -50,52 +50,56 @@ export function FileLabelPrompt({ visible, onSubmit, onCancel }) {
     );
   }
 
-  export async function uploadProcedureFile({
-    procedureId,
-    fileUrls,
-    setFileUrls,
-    scrollToEnd,
-    fileLabels,
-    setFileLabels,
-    label,
-  }) {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: 'application/pdf',
-        copyToCacheDirectory: true,
-        multiple: false,
-      });
-  
-      if (!result.canceled && result.assets?.length > 0) {
-        const file = result.assets[0];
-        const localUri = file.uri;
-  
-        const sanitizedLabel = label?.trim().replace(/[^a-z0-9_\-]/gi, '_') || 'Untitled';
-        const fileName = `${sanitizedLabel}-${procedureId}-${Date.now()}.pdf`;
-  
-        // ✅ Optimistically update local gallery
-        const updatedUrls = [...(fileUrls || []), localUri];
-        const updatedLabels = [...(fileLabels || []), sanitizedLabel];
-  
-        setFileUrls(updatedUrls);
-        setFileLabels(updatedLabels);
-  
-        if (scrollToEnd) {
-          setTimeout(scrollToEnd, 300);
-        }
-  
-        // 🧠 Queue upload job
-        await tryNowOrQueue('uploadProcedureFile', {
-          localUri,
-          label: sanitizedLabel,
-          procedureId,
-          fileName,
-        });
+export async function uploadProcedureFile({
+  procedureId,
+  fileUrls,
+  setFileUrls,
+  scrollToEnd,
+  fileLabels,
+  setFileLabels,
+  label,
+}) {
+  try {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: 'application/pdf',
+      copyToCacheDirectory: true,
+      multiple: false,
+    });
+
+    if (!result.canceled && result.assets?.length > 0) {
+      const file = result.assets[0];
+      const localUri = file.uri;
+
+      const sanitizedLabel = label?.trim().replace(/[^a-z0-9_\-]/gi, '_') || 'Untitled';
+      const fileName = `${sanitizedLabel}-${procedureId}-${Date.now()}.pdf`;
+
+      // ✅ Optimistically update local gallery
+      const updatedUrls = [...(fileUrls || []), localUri];
+      const updatedLabels = [...(fileLabels || []), sanitizedLabel];
+
+      setFileUrls(updatedUrls);
+      setFileLabels(updatedLabels);
+
+      if (scrollToEnd) {
+        setTimeout(scrollToEnd, 300);
       }
-    } catch (err) {
-      console.error('File selection or queuing failed:', err);
+
+      // 🧠 Queue upload job with memory patch support
+      await tryNowOrQueue('uploadProcedureFile', {
+        localUri,
+        label: sanitizedLabel,
+        procedureId,
+        fileName,
+        fileUrls: updatedUrls,
+        setFileUrls,
+        fileLabels: updatedLabels,
+        setFileLabels,
+      });
     }
+  } catch (err) {
+    addInAppLog(`[ERROR] File selection or queuing failed: ${err.message}`);
   }
+}
     
 
 export async function deleteProcedureFile({
@@ -118,8 +122,14 @@ export async function deleteProcedureFile({
 
       if (storageError) throw storageError;
 
-      const updatedUrls = fileUrls.filter((uri) => uri !== uriToDelete);
-      const updatedLabels = fileLabels.filter((_, i) => fileUrls[i] !== uriToDelete);
+      const deleteIndex = fileUrls.findIndex((uri) => uri === uriToDelete);
+      if (deleteIndex === -1) {
+        addInAppLog(`[SKIP] File not found in list: ${uriToDelete}`);
+        return;
+      }
+
+      const updatedUrls = fileUrls.filter((_, i) => i !== deleteIndex);
+      const updatedLabels = fileLabels.filter((_, i) => i !== deleteIndex);
 
       setFileUrls(updatedUrls);
       setFileLabels(updatedLabels);
@@ -134,24 +144,34 @@ export async function deleteProcedureFile({
 
       if (dbError) throw dbError;
 
+      addInAppLog(`[DELETE] Removed file from DB and memory: ${uriToDelete}`);
+
       if (refreshMachine) refreshMachine();
     });
   } catch (error) {
-    console.error('Failed to delete file:', error);
+    addInAppLog(`[DELETE FAIL] Could not delete file: ${error.message}`);
+    throw error;
   }
 }
  
-export async function uploadFileToSupabase({ localUri, label, procedureId, fileName }) {
+export async function uploadFileToSupabase({
+  localUri,
+  label,
+  procedureId,
+  fileName,
+  setFileUrls,
+  fileUrls,
+  setFileLabels,
+  fileLabels,
+}) {
   const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_BUCKET}/${fileName}`;
 
-  // ✅ Check if local file exists before upload
   const fileInfo = await FileSystem.getInfoAsync(localUri);
   if (!fileInfo.exists) {
     addInAppLog(`[SKIP] Local file not found—uploadProcedureFile aborted: ${localUri}`);
     return;
   }
 
-  // 🔐 Prevent duplicate insert
   const { data: procDataCheck, error: checkError } = await supabase
     .from('procedures')
     .select('file_urls, file_labels')
@@ -169,7 +189,7 @@ export async function uploadFileToSupabase({ localUri, label, procedureId, fileN
     const result = await FileSystem.uploadAsync(uploadUrl, localUri, {
       httpMethod: 'PUT',
       headers: {
-        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
         'Content-Type': 'application/pdf',
       },
       uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
@@ -195,9 +215,26 @@ export async function uploadFileToSupabase({ localUri, label, procedureId, fileN
     if (updateError) throw updateError;
 
     addInAppLog(`[UPLOAD] File uploaded and database updated: ${publicUrl}`);
-    
-    
-    // 🧹 Clean up local file after successful upload
+
+    // ✅ Patch local memory if available
+    if (setFileUrls && fileUrls && setFileLabels && fileLabels) {
+      addInAppLog(`[PATCH] Attempting to update in-memory file URLs...`);
+      addInAppLog(`[DEBUG] localUri: ${localUri}`);
+      addInAppLog(`[DEBUG] publicUrl: ${publicUrl}`);
+
+      const updatedUrlsInMemory = fileUrls.map(uri =>
+        uri.startsWith('file://') && uri.includes(procedureId) && publicUrl.includes(fileName)
+          ? publicUrl
+          : uri
+      );
+      const updatedLabelsInMemory = [...fileLabels];
+
+      setFileUrls(updatedUrlsInMemory);
+      setFileLabels(updatedLabelsInMemory);
+
+      addInAppLog(`[MEMORY PATCH] Final fileUrls: ${JSON.stringify(updatedUrlsInMemory)}`);
+    }
+
     if (localUri.startsWith('file://')) {
       try {
         await FileSystem.deleteAsync(localUri, { idempotent: true });
@@ -207,7 +244,6 @@ export async function uploadFileToSupabase({ localUri, label, procedureId, fileN
       }
     }
 
-  
   } catch (error) {
     addInAppLog(`[QUEUE RETRY] File upload will retry later: ${error.message}`);
     throw error;
@@ -215,15 +251,16 @@ export async function uploadFileToSupabase({ localUri, label, procedureId, fileN
 }
 
 
+
 export function AttachmentGridViewer({
-    imageUrls,
-    fileUrls,
-    fileLabels,
-    editMode,
-    onDeleteAttachment,
-    onSelectImage,
-  }) {
-    const renderStrike = () => (
+  imageUrls,
+  fileUrls,
+  fileLabels,
+  editMode,
+  onDeleteAttachment,
+  onSelectImage,
+}) {
+  const renderStrike = () => (
     <View style={{
       position: 'absolute',
       top: 0, left: 0, right: 0, bottom: 0,
@@ -247,6 +284,7 @@ export function AttachmentGridViewer({
         <Image source={{ uri }} style={styles.thumbnail} />
         {editMode && renderStrike()}
       </TouchableOpacity>
+      {uri.startsWith('file://') && <PendingHourglass />}
     </View>
   );
 
@@ -256,12 +294,12 @@ export function AttachmentGridViewer({
         onPress={() => editMode ? onDeleteAttachment(uri) : Linking.openURL(uri)}
         style={styles.pdfTouchable}
       >
-        <MaterialCommunityIcons name="file-cog" color="#0f0" size={27} />
+        <MaterialCommunityIcons name="file-cog-outline" color="#0f0" size={27} />
         <Text style={styles.pdfLabelText} numberOfLines={3}>
           {fileLabels?.[index] || 'Unlabeled'}
         </Text>
       </TouchableOpacity>
-  
+      {uri.startsWith('file://') && <PendingHourglass />}
       {editMode && (
         <View style={styles.pdfStrikeWrapper}>
           <View style={styles.pdfStrikeLine} />
@@ -269,7 +307,7 @@ export function AttachmentGridViewer({
       )}
     </View>
   );
-              
+
   return (
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
       {[...(imageUrls || [])].map(renderImage)}

@@ -141,56 +141,38 @@ export function FullscreenImageViewer({
 export async function deleteProcedureImage({
   uriToDelete,
   imageUrls,
-  procedureId,
   setImageUrls,
+  procedureId,
   refreshMachine,
 }) {
   try {
-    // 🛑 Prevent attempt to delete file:// images from Supabase
-    if (uriToDelete.startsWith('file://')) {
-      console.warn('[SKIP DELETE] Attempted to delete local-only image:', uriToDelete);
-    
-      // Clean up local image from gallery
-      const updatedImages = imageUrls.filter(uri => uri !== uriToDelete);
-      setImageUrls(updatedImages);
-    
-      // 🧹 Attempt to remove corresponding upload job from queue
-      const jobs = await loadJobs();
-      const match = jobs.find(j =>
-        j.label === 'uploadProcedureImage' &&
-        j.payload?.localUri === uriToDelete
-      );
-    
-      if (match) {
-        await removeJob(match.id);
-        console.log('[QUEUE CLEANUP] Removed pending upload job for deleted image:', uriToDelete);
-      }
-    
-      return;
-    }
-    
     await wrapWithSync('deleteProcedureImage', async () => {
-      const imageName = uriToDelete.split('/').pop();
+      const fileName = uriToDelete.split('/').pop();
 
       const { error: storageError } = await supabase
         .storage
         .from(SUPABASE_BUCKET)
-        .remove([imageName]);
+        .remove([fileName]);
+
       if (storageError) throw storageError;
 
-      const updatedImages = imageUrls.filter(uri => uri !== uriToDelete);
-      setImageUrls(updatedImages);
+      const updatedUrls = imageUrls.filter((uri) => uri !== uriToDelete);
+      setImageUrls(updatedUrls);
 
-      const { error: updateError } = await supabase
+      const { error: dbError } = await supabase
         .from('procedures')
-        .update({ image_urls: updatedImages })
+        .update({
+          image_urls: updatedUrls,
+        })
         .eq('id', procedureId);
-      if (updateError) throw updateError;
+
+      if (dbError) throw dbError;
 
       if (refreshMachine) refreshMachine();
     });
   } catch (error) {
-    console.error('Failed to delete image:', error);
+    addInAppLog(`[DELETE FAIL] Could not delete image: ${error.message}`);
+    throw error;
   }
 }
 
@@ -238,8 +220,11 @@ loadJobs().then(jobs => {
 
 export async function uploadImageToSupabase({ localUri, procedureId, fileName }) {
   const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_BUCKET}/${fileName}`;
+  addInAppLog(`[START] Uploading image for procedure: ${procedureId}`);
+  addInAppLog(`[DEBUG] Local URI: ${localUri}`);
+  addInAppLog(`[DEBUG] Target fileName: ${fileName}`);
+  addInAppLog(`[DEBUG] Expected public URL: ${publicUrl}`);
 
-  // Optional early exit: check if image is still expected
   const { data: procDataCheck, error: checkError } = await supabase
     .from('procedures')
     .select('image_urls')
@@ -255,6 +240,7 @@ export async function uploadImageToSupabase({ localUri, procedureId, fileName })
 
   try {
     const uploadUrl = `${SUPABASE_URL}/storage/v1/object/${SUPABASE_BUCKET}/${fileName}`;
+    addInAppLog(`[UPLOAD] Uploading to: ${uploadUrl}`);
 
     const result = await FileSystem.uploadAsync(uploadUrl, localUri, {
       httpMethod: 'PUT',
@@ -270,8 +256,6 @@ export async function uploadImageToSupabase({ localUri, procedureId, fileName })
       throw new Error('Supabase upload failed');
     }
 
-    const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_BUCKET}/${fileName}`;
-
     const { data: procData, error: fetchError } = await supabase
       .from('procedures')
       .select('image_urls')
@@ -280,11 +264,8 @@ export async function uploadImageToSupabase({ localUri, procedureId, fileName })
 
     if (fetchError) throw fetchError;
 
-    // Avoid adding publicUrl if it already exists (idempotent)
     const current = procData?.image_urls || [];
-    const updated = current.includes(publicUrl)
-      ? current
-      : [...current, publicUrl];
+    const updated = current.includes(publicUrl) ? current : [...current, publicUrl];
 
     const { error: updateError } = await supabase
       .from('procedures')
@@ -295,7 +276,6 @@ export async function uploadImageToSupabase({ localUri, procedureId, fileName })
 
     addInAppLog(`[UPLOAD] Image uploaded and database updated: ${publicUrl}`);
 
-    // 🧹 Clean up local image after successful upload
     if (localUri.startsWith('file://')) {
       try {
         await FileSystem.deleteAsync(localUri, { idempotent: true });
@@ -304,7 +284,6 @@ export async function uploadImageToSupabase({ localUri, procedureId, fileName })
         addInAppLog(`[CLEANUP FAIL] Could not delete local image: ${cleanupError.message}`);
       }
     }
-
   } catch (error) {
     addInAppLog(`[QUEUE RETRY] Image upload will retry later: ${error.message}`);
     throw error;

@@ -2,6 +2,9 @@
 
 import { StyleSheet } from 'react-native';
 import { StatusBar } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 export const styles = StyleSheet.create({
   addBtn: {
@@ -423,5 +426,57 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 3,
 
-  }
-  });
+  },
+pendingBadge: {
+  position: 'absolute',
+  top: 1,
+  right: 4,
+  borderRadius: 12,
+  padding: 2,
+  zIndex: 3,
+}
+});
+
+export const PendingHourglass = () => {
+  const [sandFrame, setSandFrame] = useState(0);
+
+  const sandIcons = ['timer-sand', 'timer-sand', 'timer-sand'];
+
+  const getTransform = () => {
+    if (sandFrame === 1) return [{ scaleY: -1 }];      // Flip vertically
+    if (sandFrame === 2) return [{ rotate: '90deg' }]; // Rotate horizontally
+    return [];
+  };
+
+  useEffect(() => {
+    const delays = [250, 750, 1250];
+    let currentFrame = 0;
+
+    const advanceFrame = () => {
+      setSandFrame(currentFrame);
+      currentFrame = (currentFrame + 1) % 3;
+      setTimeout(advanceFrame, delays[currentFrame]);
+    };
+
+    const timeoutId = setTimeout(advanceFrame, delays[0]);
+    return () => clearTimeout(timeoutId);
+  }, []);
+
+  return (
+    <View style={{
+      position: 'absolute',
+      top: 1,
+      right: 4,
+      zIndex: 3,
+    }}>
+      <MaterialCommunityIcons
+        name={sandIcons[sandFrame]}
+        size={20}
+        color="#0f0"
+        style={{ transform: getTransform() }}
+      />
+    </View>
+  );
+};
+
+
