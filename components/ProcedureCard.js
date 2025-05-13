@@ -216,7 +216,7 @@ setAttachmentDeleteMode(false);
         await wrapWithSync('restoreProcedureState', async () => {
           const { data, error } = await supabase
             .from('procedures')
-            .select('description, image_urls, image_captions, file_urls, file_labels')
+.select('description, image_urls, file_urls, file_labels, captions')
             .eq('id', item.id)
             .single();
   
