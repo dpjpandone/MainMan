@@ -434,7 +434,15 @@ pendingBadge: {
   borderRadius: 12,
   padding: 2,
   zIndex: 3,
+},
+captionText: {
+  color: '#00ff00',
+  fontSize: 12,
+  marginTop: 2,
+  textAlign: 'center',
+  maxWidth: 100,
 }
+
 });
 
 export const PendingHourglass = () => {

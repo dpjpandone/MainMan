@@ -89,38 +89,33 @@ uploadProcedureFile: async ({
     addInAppLog(`[EXECUTOR] Procedure marked complete: ${procedureId}`);
   },
 
-saveProcedureDescription: async ({ procedureId, description }) => {
-  addInAppLog(`[EXECUTOR] Saving description for: ${procedureId}`);
-
-  const { data: procData, error: fetchError } = await supabase
-    .from('procedures')
-    .select('image_urls, file_urls, file_labels')
-    .eq('id', procedureId)
-    .single();
-
-  if (fetchError) {
-    addInAppLog(`[EXECUTOR] Failed to fetch procedure before save: ${fetchError.message}`);
-    throw fetchError;
-  }
-
-  const { image_urls = [], file_urls = [], file_labels = [] } = procData;
+saveProcedureDescription: async ({
+  procedureId,
+  description,
+  imageUrls = [],
+  fileUrls = [],
+  fileLabels = [],
+  captions = { image: {}, file: {} },
+}) => {
+  addInAppLog(`[EXECUTOR] Saving procedure metadata for: ${procedureId}`);
 
   const { error: updateError } = await supabase
     .from('procedures')
     .update({
       description,
-      image_urls,
-      file_urls,
-      file_labels,
+      image_urls: imageUrls,
+      file_urls: fileUrls,
+      file_labels: fileLabels, // ✅ Still needed
+      captions,                // ✅ New captions object
     })
     .eq('id', procedureId);
 
   if (updateError) {
-    addInAppLog(`[EXECUTOR] Failed to save description: ${updateError.message}`);
+    addInAppLog(`[EXECUTOR] Failed to update procedure: ${updateError.message}`);
     throw updateError;
   }
 
-  addInAppLog(`[EXECUTOR] Description saved for procedure: ${procedureId}`);
+  addInAppLog(`[EXECUTOR] Procedure metadata saved successfully: ${procedureId}`);
 },
 
   addProcedure: async ({ machineId, name, description, interval, startingDate, companyId }) => {

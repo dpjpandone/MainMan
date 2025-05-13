@@ -14,13 +14,14 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import ProcedureSettings from './ProcedureSettings';
 import { handleImageSelection } from '../utils/imageUtils';
 import { tryNowOrQueue } from '../utils/SyncManager';
+import { CaptionPrompt } from '../utils/captionUtils';
 
 export default function ProcedureCard({ item, onComplete, onDelete, refreshMachine }) {
 
   const [bgColor, setBgColor] = useState('#e4001e');
   const [modalVisible, setModalVisible] = useState(false);
-  const [editMode, setEditMode] = useState(false);
-  const [imageEditMode, setImageEditMode] = useState(false);
+const [detailsEditMode, setDetailsEditMode] = useState(false);
+const [attachmentDeleteMode, setAttachmentDeleteMode] = useState(false);
   const [description, setDescription] = useState(item.description || '');
   const [imageUrls, setImageUrls] = useState(item.imageUrls || []);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
@@ -38,8 +39,11 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
   const intervalDays = item.interval_days || 0;
   const isPastDue = !lastCompleted || (Math.floor((Date.now() - lastCompleted) / 86400000) > intervalDays);
   const [galleryKey, setGalleryKey] = useState(0);
+const [captions, setCaptions] = useState(item.captions || { image: {}, file: {} });
+const [captionModalVisible, setCaptionModalVisible] = useState(false);
+const [captionTargetUri, setCaptionTargetUri] = useState(null);
 
-  const renderLinkedDescription = (text) => {
+const renderLinkedDescription = (text) => {
     const parts = text.split(/(\bhttps?:\/\/\S+\b)/g); // Match http/https URLs
     return parts.map((part, index) => {
       if (part.match(/^https?:\/\/\S+$/)) {
@@ -147,26 +151,29 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
     setModalVisible(true); // Show modal immediately — allows warning display
   
     try {
-      await wrapWithSync('loadProcedureDetails', async () => {
-        const { data, error } = await supabase
-          .from('procedures')
-          .select('description, image_urls, file_urls, file_labels')
-          .eq('id', item.id)
-          .single();
+await wrapWithSync('loadProcedureDetails', async () => {
+  const { data, error } = await supabase
+    .from('procedures')
+.select('description, image_urls, file_urls, file_labels, captions')
+    .eq('id', item.id)
+    .single();
+
+  if (error || !data) {
+    console.log('Procedure not found or error:', error);
+    return;
+  }
+
+  setDescription(data.description || '');
+  setImageUrls(data.image_urls || []);
+setCaptions(data.captions || { image: {}, file: {} });
+console.log('[DEBUG] Captions object received from Supabase:', data.captions);
+
+  setFileUrls(data.file_urls || []);
+  setFileLabels(data.file_labels || []);
+});
   
-        if (error || !data) {
-          console.log('Procedure not found or error:', error); // 👈 log only
-          return;
-        }
-  
-        setDescription(data.description || '');
-        setImageUrls(data.image_urls || []);
-        setFileUrls(data.file_urls || []);
-        setFileLabels(data.file_labels || []);
-      });
-  
-      setEditMode(false);
-      setImageEditMode(false);
+setDetailsEditMode(false);
+setAttachmentDeleteMode(false);
     } catch (err) {
       console.log('[SAFE FAIL] openModal failed but UI continues');
     }
@@ -187,28 +194,29 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
 
   const saveDescription = async () => {
     try {
-      await tryNowOrQueue('saveProcedureDescription', {
-        procedureId: item.id,
-        description,
-        imageUrls,
-        fileUrls,
-        fileLabels,
-      });
+await tryNowOrQueue('saveProcedureDescription', {
+  procedureId: item.id,
+  description,
+  imageUrls,
+  fileUrls,
+  fileLabels, 
+  captions,   
+});
   
-      setEditMode(false);
-      setImageEditMode(false);
+setDetailsEditMode(false);
+setAttachmentDeleteMode(false);
     } catch (error) {
       console.error('Failed to queue description update:', error);
     }
   };
         
   const handleBack = async () => {
-    if (editMode) {
+    if (detailsEditMode) {
       try {
         await wrapWithSync('restoreProcedureState', async () => {
           const { data, error } = await supabase
             .from('procedures')
-            .select('description, image_urls, file_urls, file_labels')
+            .select('description, image_urls, image_captions, file_urls, file_labels')
             .eq('id', item.id)
             .single();
   
@@ -216,6 +224,7 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
   
           setDescription(data.description || '');
           setImageUrls(data.image_urls || []);
+          setCaptions(data.captions || { image: {}, file: {} });
           setFileUrls(data.file_urls || []);
           setFileLabels(data.file_labels || []);
         });
@@ -223,8 +232,8 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
         console.log('[BACK FALLBACK] Failed to restore data, exiting anyway.');
       } finally {
         // ✅ Always exit edit mode
-        setEditMode(false);
-        setImageEditMode(false);
+setDetailsEditMode(false);
+setAttachmentDeleteMode(false);
       }
     } else {
       // ✅ Always allow exit from modal
@@ -245,7 +254,17 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
   
     setGalleryKey(prev => prev + 1);
   };
-        
+
+const handleSaveCaption = async (captionText) => {
+  setCaptions(prev => ({
+    ...prev,
+    image: {
+      ...prev.image,
+      [captionTargetUri]: captionText,
+    },
+  }));
+  setCaptionModalVisible(false);
+};
   //main return
 
   return (
@@ -335,7 +354,7 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
   <SyncWarning />
 </View>
 
-  {editMode && !keyboardVisible && (
+{detailsEditMode && !keyboardVisible && (
   <>
     <TouchableOpacity style={styles.modalCloseBtn} onPress={handleBack}>
       <Text style={styles.modalCloseBtnText}>✕</Text>
@@ -351,9 +370,9 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
   <View style={{ flex: 1 }}>
     {/* Text Section */}
     <View style={{ flex: 1 }}>
-    {!editMode ? (
-      <ScrollView style={styles.scrollBox}>
-  <Text style={styles.cardText}>
+{!detailsEditMode ? (
+<ScrollView style={styles.scrollBox}>
+  <Text style={styles.cardText} selectable>
     {renderLinkedDescription(description || 'No description yet.')}
   </Text>
 </ScrollView>
@@ -381,17 +400,19 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
 {/* Image Gallery Section */}
 {!keyboardVisible && (
   <View style={{ height: 200, marginTop: 10 }}>
-<ScrollView
-  ref={galleryScrollRef}
-  contentContainerStyle={{ justifyContent: 'center', alignItems: 'center' }}
->
+    <ScrollView
+      ref={galleryScrollRef}
+      contentContainerStyle={{ justifyContent: 'center', alignItems: 'center' }}
+    >
       {(imageUrls.length > 0 || fileUrls.length > 0) ? (
         <AttachmentGridViewer
           key={galleryKey}
           imageUrls={imageUrls}
           fileUrls={fileUrls}
-          fileLabels={fileLabels} // ✅ Pass this in to display labels
-          editMode={imageEditMode}
+          fileLabels={fileLabels}
+          captions={captions}
+          detailsEditMode={detailsEditMode}
+          attachmentDeleteMode={attachmentDeleteMode}
           onDeleteAttachment={(uri) => {
             if (uri.endsWith('.pdf')) {
               deleteProcedureFile({
@@ -411,6 +432,10 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
               window._setSelectedImageIndex(index);
             }
           }}
+          onEditCaption={(uri) => {
+            setCaptionTargetUri(uri);
+            setCaptionModalVisible(true);
+          }}
         />
       ) : (
         <Text style={{ color: '#888', textAlign: 'center' }}>No Attachments</Text>
@@ -422,9 +447,10 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
 {/* Fixed Bottom Buttons */}
 {!keyboardVisible && (
   <View style={styles.fixedButtonRow}>
-    {!editMode ? (
+{!detailsEditMode ? (
       <>
-        <TouchableOpacity style={styles.fixedButton} onPress={() => setEditMode(true)}>
+        <TouchableOpacity style={styles.fixedButton} onPress={() => setDetailsEditMode(true)
+}>
           <Text style={styles.buttonText}>Edit</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.fixedButton} onPress={handleBack}>
@@ -453,8 +479,8 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
 <TouchableOpacity
   style={[styles.fixedButton, styles.deleteButton]}
   onPress={() => {
-    setImageEditMode(prev => {
-      const newMode = !prev;
+setAttachmentDeleteMode(prev => {
+        const newMode = !prev;
       if (newMode) scrollToGalleryEnd();
       return newMode;
     });
@@ -492,7 +518,19 @@ export default function ProcedureCard({ item, onComplete, onDelete, refreshMachi
   }}
   onCancel={() => setLabelPromptVisible(false)}
 />
+
+<CaptionPrompt
+  visible={captionModalVisible}
+  uri={captionTargetUri}
+  captions={captions}
+  setCaptions={setCaptions}
+  initialCaption={captions?.image?.[captionTargetUri] || ''}
+  onSubmit={handleSaveCaption}
+  onCancel={() => setCaptionModalVisible(false)}
+/>
+
 <FullscreenImageViewerController imageUrls={imageUrls} />
+
 <ProcedureSettings
   visible={settingsModalVisible}
   onClose={() => setSettingsModalVisible(false)}

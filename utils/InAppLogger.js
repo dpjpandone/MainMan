@@ -1,6 +1,6 @@
 import { supabase } from './supaBaseConfig';
 
-export const LOGGING_ENABLED = false; // ⬅️ Set to false for field testing
+export const LOGGING_ENABLED = true; // ⬅️ Set to false for field testing
 
 const inAppLogs = [];
 let logCallback = null;

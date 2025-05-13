@@ -10,6 +10,7 @@ import * as Linking from 'expo-linking';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { wrapWithSync, tryNowOrQueue } from './SyncManager';
 import { addInAppLog } from '../utils/InAppLogger';
+import { ImageCaptionPrompt } from '../utils/captionUtils';
 
 export function FileLabelPrompt({ visible, onSubmit, onCancel }) {
     const [label, setLabel] = useState('');
@@ -256,10 +257,14 @@ export function AttachmentGridViewer({
   imageUrls,
   fileUrls,
   fileLabels,
-  editMode,
+  captions = { image: {}, file: {} },
+  detailsEditMode,
+  attachmentDeleteMode,
   onDeleteAttachment,
   onSelectImage,
-}) {
+  onEditCaption,
+})
+{
   const renderStrike = () => (
     <View style={{
       position: 'absolute',
@@ -278,35 +283,75 @@ export function AttachmentGridViewer({
     </View>
   );
 
-  const renderImage = (uri, index) => (
-    <View key={`img-${index}`} style={{ position: 'relative' }}>
-      <TouchableOpacity onPress={() => editMode ? onDeleteAttachment(uri) : onSelectImage(index)}>
-        <Image source={{ uri }} style={styles.thumbnail} />
-        {editMode && renderStrike()}
-      </TouchableOpacity>
-      {uri.startsWith('file://') && <PendingHourglass />}
-    </View>
-  );
+const renderImage = (uri, index) => {
+  console.log('[DEBUG] Rendering thumbnail for:', uri);
+  console.log('[DEBUG] Caption for this image:', captions?.image?.[uri]);
 
-  const renderFile = (uri, index) => (
-    <View key={`file-${index}`} style={{ position: 'relative' }}>
-      <TouchableOpacity
-        onPress={() => editMode ? onDeleteAttachment(uri) : Linking.openURL(uri)}
-        style={styles.pdfTouchable}
-      >
-        <MaterialCommunityIcons name="file-cog-outline" color="#0f0" size={27} />
-        <Text style={styles.pdfLabelText} numberOfLines={3}>
-          {fileLabels?.[index] || 'Unlabeled'}
-        </Text>
-      </TouchableOpacity>
+  return (
+    <View key={`img-${index}`} style={{ position: 'relative' }}>
+      <View style={{ alignItems: 'center' }}>
+        <TouchableOpacity onPress={() => attachmentDeleteMode ? onDeleteAttachment(uri) : onSelectImage(index)}>
+          <Image source={{ uri }} style={styles.thumbnail} />
+          {attachmentDeleteMode && renderStrike()}
+        </TouchableOpacity>
+
+{captions?.image?.[uri] && (
+  <View style={{
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(32, 32, 32, 0.6)', // soft dark overlay
+    paddingVertical: 2,
+    paddingHorizontal: 4,
+  }}>
+<Text style={styles.captionText} numberOfLines={2}>
+  {captions.image[uri]}
+</Text>
+  </View>
+)}
+      </View>
+
       {uri.startsWith('file://') && <PendingHourglass />}
-      {editMode && (
-        <View style={styles.pdfStrikeWrapper}>
-          <View style={styles.pdfStrikeLine} />
-        </View>
+
+      {detailsEditMode && !attachmentDeleteMode && (
+<TouchableOpacity
+  onPress={() => onEditCaption(uri)}
+  style={{
+    position: 'absolute',
+    top: 4,
+    left: 4,
+    backgroundColor: '#00ff00',
+    padding: 4,
+    zIndex: 3,
+  }}
+>
+  <MaterialCommunityIcons name="pencil" color="#000" size={18} />
+</TouchableOpacity>
       )}
     </View>
   );
+};
+
+const renderFile = (uri, index) => (
+  <View key={`file-${index}`} style={{ position: 'relative' }}>
+    <TouchableOpacity
+      onPress={() => attachmentDeleteMode ? onDeleteAttachment(uri) : Linking.openURL(uri)}
+      style={styles.pdfTouchable}
+    >
+      <MaterialCommunityIcons name="file-cog-outline" color="#0f0" size={27} />
+      <Text style={styles.pdfLabelText} numberOfLines={3}>
+        {fileLabels?.[index] || 'Unlabeled'}
+      </Text>
+    </TouchableOpacity>
+    {uri.startsWith('file://') && <PendingHourglass />}
+    {attachmentDeleteMode && (
+      <View style={styles.pdfStrikeWrapper}>
+        <View style={styles.pdfStrikeLine} />
+      </View>
+    )}
+  </View>
+);
 
   return (
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
