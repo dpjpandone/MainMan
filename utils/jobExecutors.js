@@ -99,14 +99,32 @@ saveProcedureDescription: async ({
 }) => {
   addInAppLog(`[EXECUTOR] Saving procedure metadata for: ${procedureId}`);
 
+  // Re-fetch synced attachment URLs to avoid saving stale file:// URIs
+  const { data: procData, error: fetchError } = await supabase
+    .from('procedures')
+    .select('image_urls, file_urls, file_labels')
+    .eq('id', procedureId)
+    .single();
+
+  if (fetchError) {
+    addInAppLog(`[EXECUTOR] Failed to fetch procedure before save: ${fetchError.message}`);
+    throw fetchError;
+  }
+
+  const {
+    image_urls = [],
+    file_urls = [],
+    file_labels = [],
+  } = procData;
+
   const { error: updateError } = await supabase
     .from('procedures')
     .update({
       description,
-      image_urls: imageUrls,
-      file_urls: fileUrls,
-      file_labels: fileLabels, // ✅ Still needed
-      captions,                // ✅ New captions object
+      image_urls,  // Use Supabase URLs
+      file_urls,
+      file_labels,
+      captions,
     })
     .eq('id', procedureId);
 
