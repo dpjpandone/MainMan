@@ -13,7 +13,7 @@ import * as Linking from 'expo-linking';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import ProcedureSettings from './ProcedureSettings';
 import { handleImageSelection } from '../utils/imageUtils';
-import { tryNowOrQueue } from '../utils/SyncManager';
+import { tryNowOrQueue, subscribeToJobComplete } from '../utils/SyncManager';
 import { CaptionPrompt } from '../utils/captionUtils';
 
 export default function ProcedureCard({ item, onComplete, onDelete, refreshMachine }) {
@@ -144,6 +144,31 @@ const renderLinkedDescription = (text) => {
   
     return () => clearInterval(intervalId);
   }, [item]);
+
+useEffect(() => {
+  const unsubscribe = subscribeToJobComplete((label, payload) => {
+    console.log('[DEBUG] ProcedureCard callback fired:', label, payload);
+    console.log(`[CALLBACK] Job complete received in ProcedureCard: ${label}`);
+
+    try {
+      if (
+        label === 'uploadProcedureImage' &&
+        payload.procedureId === item.id &&
+        typeof refreshMachine === 'function'
+      ) {
+        console.log(`[UI PATCH] Job complete for ${label} — refreshing machine`);
+        refreshMachine();
+      } else {
+        console.log(`[SKIP] Unmatched or invalid callback context in ProcedureCard`);
+      }
+    } catch (err) {
+      console.log(`[ERROR] ProcedureCard callback crash: ${err.message}`);
+    }
+  });
+
+  return () => unsubscribe();
+}, [item.id]);
+
         
   //section 2 Functions  
   
@@ -164,7 +189,9 @@ await wrapWithSync('loadProcedureDetails', async () => {
   }
 
   setDescription(data.description || '');
-  setImageUrls(data.image_urls || []);
+const cleanedUrls = (data.image_urls || []).filter(uri => uri.startsWith('http'));
+setImageUrls(cleanedUrls);
+setGalleryKey(prev => prev + 1);
 setCaptions(data.captions || { image: {}, file: {} });
 console.log('[DEBUG] Captions object received from Supabase:', data.captions);
 
@@ -223,7 +250,9 @@ setAttachmentDeleteMode(false);
           if (error || !data) throw error;
   
           setDescription(data.description || '');
-          setImageUrls(data.image_urls || []);
+const cleanedUrls = (data.image_urls || []).filter(uri => uri.startsWith('http'));
+setImageUrls(cleanedUrls);
+setGalleryKey(prev => prev + 1);
           setCaptions(data.captions || { image: {}, file: {} });
           setFileUrls(data.file_urls || []);
           setFileLabels(data.file_labels || []);
@@ -296,7 +325,7 @@ tryNowOrQueue('setImageCaptionDeferred', {
   fileName,
 });
     } else {
-addInAppLog('[CAPTION SYNC] Skipped caption queue — no fileName available.');
+console.log('[CAPTION SYNC] Skipped caption queue — no fileName available.');
     }
   }
 };

@@ -2,6 +2,7 @@ import { uploadImageToSupabase } from './imageUtils';
 import { uploadFileToSupabase } from './fileUtils';
 import { SUPABASE_URL, SUPABASE_BUCKET, SUPABASE_KEY, supabase } from './supaBaseConfig';
 import { addInAppLog } from '../utils/InAppLogger';
+import { notifyJobComplete } from './SyncManager';
 
 export const jobExecutors = {
 uploadProcedureImage: async ({
@@ -10,21 +11,26 @@ uploadProcedureImage: async ({
   fileName,
   setImageUrls,
   imageUrls,
-  captions,        // ✅ NEW
-  setCaptions,     // ✅ NEW
+  captions,
+  setCaptions,
 }) => {
   addInAppLog(`[EXECUTOR] Starting image upload: ${localUri}`);
   try {
-await uploadImageToSupabase({
-  procedureId,
-  localUri,
-  fileName,
-  imageUrls,
-  setImageUrls,
-  captions,      // ✅ NEW
-  setCaptions,   // ✅ NEW
-});
+    await uploadImageToSupabase({
+      procedureId,
+      localUri,
+      fileName,
+      imageUrls,
+      setImageUrls,
+      captions,
+      setCaptions,
+    });
+
     addInAppLog(`[EXECUTOR] Image uploaded successfully: ${localUri}`);
+
+    // ✅ Notify the system that this job is done
+    addInAppLog(`[DEBUG] Executor finished — triggering notifyJobComplete`);
+    notifyJobComplete('uploadProcedureImage', { procedureId });
   } catch (err) {
     addInAppLog(`[EXECUTOR] Image upload failed: ${err.message}`);
     throw err;

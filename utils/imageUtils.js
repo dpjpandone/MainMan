@@ -180,52 +180,47 @@ export async function handleImageSelection({
   procedureId,
   imageUrls,
   setImageUrls,
+  captions,
+  setCaptions,
   scrollToEnd,
-  onImagePicked, // ✅ new
+  onImagePicked,
 }) {
   try {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: false,
-      quality: 0.7, // built-in compression
+      quality: 0.7,
     });
 
-    if (result.canceled || !result.assets?.length) return;
+    if (result.cancelled || !result.assets || !result.assets.length) return;
 
     const asset = result.assets[0];
     const localUri = asset.uri;
-    addInAppLog(`[SELECTED] New image picked: ${localUri}`);
+    console.log(`[SELECTED] New image picked: ${localUri}`);
 
     const fileName = `${procedureId}-${Date.now()}.jpg`;
 
-    // 1. Optimistically display
+    // 1. Optimistically add local image to gallery
     const updated = [...imageUrls, localUri];
     setImageUrls(updated);
+    console.log(`[OPTIMISTIC] Updated imageUrls: ${JSON.stringify(updated)}`);
 
-    // 2. Provide fileName back to caller (for caption sync)
-    if (typeof onImagePicked === 'function') {
-      onImagePicked({ localUri, fileName });
-    }
+    if (scrollToEnd) scrollToEnd();
+    if (onImagePicked) onImagePicked(localUri);
 
-    // 3. Queue image upload
+    // 2. Trigger upload with sync + patch payload
     await tryNowOrQueue('uploadProcedureImage', {
-      localUri,
       procedureId,
+      localUri,
       fileName,
+      imageUrls,
+      setImageUrls,
+      captions,
+      setCaptions,
     });
 
-    addInAppLog(`[QUEUE ATTEMPT] Image queued or executed: ${fileName}`);
-
-    loadJobs().then(jobs => {
-      const count = jobs.filter(j => j.label === 'uploadProcedureImage').length;
-      addInAppLog(`[DEBUG] Total queued image uploads: ${count}`);
-    });
-
-    if (scrollToEnd) {
-      setTimeout(scrollToEnd, 300);
-    }
-  } catch (error) {
-    addInAppLog(`[ERROR] Image selection or queuing failed: ${error.message}`);
+    console.log(`[QUEUE ATTEMPT] Image queued or executed: ${fileName}`);
+  } catch (err) {
+    console.warn(`[ERROR] Failed to select or queue image: ${err.message}`);
   }
 }
 
@@ -235,13 +230,14 @@ export async function uploadImageToSupabase({
   fileName,
   imageUrls,
   setImageUrls,
-  setCaptions = undefined, // ✅ default safe
+  setCaptions = undefined, // ✅ safe default
 }) {
   const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_BUCKET}/${fileName}`;
-  addInAppLog(`[START] Uploading image for procedure: ${procedureId}`);
-  addInAppLog(`[DEBUG] Local URI: ${localUri}`);
-  addInAppLog(`[DEBUG] Target fileName: ${fileName}`);
-  addInAppLog(`[DEBUG] Expected public URL: ${publicUrl}`);
+
+  console.log(`[START] Uploading image for procedure: ${procedureId}`);
+  console.log(`[DEBUG] Local URI: ${localUri}`);
+  console.log(`[DEBUG] Target fileName: ${fileName}`);
+  console.log(`[DEBUG] Expected public URL: ${publicUrl}`);
 
   const { data: procDataCheck, error: checkError } = await supabase
     .from('procedures')
@@ -252,13 +248,13 @@ export async function uploadImageToSupabase({
   if (checkError) throw checkError;
 
   if (procDataCheck?.image_urls?.includes(publicUrl)) {
-    addInAppLog(`[UPLOAD] Image already exists in DB, skipping duplicate.`);
+    console.log(`[UPLOAD] Image already exists in DB, skipping duplicate.`);
     return;
   }
 
   try {
     const uploadUrl = `${SUPABASE_URL}/storage/v1/object/${SUPABASE_BUCKET}/${fileName}`;
-    addInAppLog(`[UPLOAD] Uploading to: ${uploadUrl}`);
+    console.log(`[UPLOAD] Uploading to: ${uploadUrl}`);
 
     const result = await FileSystem.uploadAsync(uploadUrl, localUri, {
       httpMethod: 'PUT',
@@ -270,7 +266,7 @@ export async function uploadImageToSupabase({
     });
 
     if (result.status !== 200) {
-      addInAppLog(`[UPLOAD RETRY] HTTP ${result.status} for ${fileName}`);
+      console.log(`[UPLOAD RETRY] HTTP ${result.status} for ${fileName}`);
       throw new Error('Supabase upload failed');
     }
 
@@ -283,44 +279,72 @@ export async function uploadImageToSupabase({
     if (fetchError) throw fetchError;
 
     const current = procData?.image_urls || [];
-    const updated = current.includes(publicUrl) ? current : [...current, publicUrl];
+    const cleaned = current.filter(uri => uri.startsWith('http'));
+    const updated = cleaned.includes(publicUrl) ? cleaned : [...cleaned, publicUrl];
 
-const { error: updateError } = await supabase
-  .from('procedures')
-  .update({ image_urls: updated })
-  .eq('id', procedureId);
+    const { error: updateError } = await supabase
+      .from('procedures')
+      .update({ image_urls: updated })
+      .eq('id', procedureId);
 
-if (updateError) throw updateError;
+    if (updateError) throw updateError;
 
-addInAppLog(`[UPLOAD] Image uploaded and database updated: ${publicUrl}`);
+    // ✅ Memory patch to replace stale file:// with public URL
+if (setImageUrls && Array.isArray(imageUrls)) {
+  console.log(`[DEBUG] imageUrls before patch: ${JSON.stringify(imageUrls)}`);
+  console.log(`[DEBUG] localUri for memory patch: ${localUri}`);
+  console.log(`[DEBUG] publicUrl for memory patch: ${publicUrl}`);
 
-// 🧠 Patch captions in memory if available
-if (typeof setCaptions === 'function') {
-  setCaptions(prev => {
-    const oldCaption = prev?.image?.[localUri];
-    if (!oldCaption) return prev;
-
-    const updatedImage = { ...prev.image };
-    delete updatedImage[localUri];
-    updatedImage[publicUrl] = oldCaption;
-
-    return {
-      ...prev,
-      image: updatedImage,
-    };
-  });
-}
-
-if (localUri.startsWith('file://')) {
-  try {
-    await FileSystem.deleteAsync(localUri, { idempotent: true });
-    addInAppLog(`[CLEANUP] Deleted local image after upload: ${localUri}`);
-  } catch (cleanupError) {
-    addInAppLog(`[CLEANUP FAIL] Could not delete local image: ${cleanupError.message}`);
+let didPatch = false;
+const patched = imageUrls.map(uri => {
+  if (uri.startsWith('file://') && uri.includes(fileName)) {
+    didPatch = true;
+    return publicUrl;
   }
+  return uri;
+});
+
+// If no match was found, fallback to appending the public URL
+if (!didPatch && !patched.includes(publicUrl)) {
+  patched.push(publicUrl);
 }
-} catch (error) {
-  addInAppLog(`[QUEUE RETRY] Image upload will retry later: ${error.message}`);
-  throw error;
+
+setImageUrls(patched);
+console.log(`[PATCH] Final in-memory imageUrls: ${JSON.stringify(patched)}`);
+
+  setImageUrls(patched);
+  console.log(`[PATCH] Updated in-memory imageUrls: ${JSON.stringify(patched)}`);
 }
+
+    console.log(`[UPLOAD] Image uploaded and database updated: ${publicUrl}`);
+
+    // 🧠 Patch captions in memory if available
+    if (typeof setCaptions === 'function') {
+      setCaptions(prev => {
+        const oldCaption = prev?.image?.[localUri];
+        if (!oldCaption) return prev;
+
+        const updatedImage = { ...prev.image };
+        delete updatedImage[localUri];
+        updatedImage[publicUrl] = oldCaption;
+
+        return {
+          ...prev,
+          image: updatedImage,
+        };
+      });
+    }
+
+    if (localUri.startsWith('file://')) {
+      try {
+        await FileSystem.deleteAsync(localUri, { idempotent: true });
+        console.log(`[CLEANUP] Deleted local image after upload: ${localUri}`);
+      } catch (cleanupError) {
+        console.log(`[CLEANUP FAIL] Could not delete local image: ${cleanupError.message}`);
+      }
+    }
+  } catch (error) {
+    console.log(`[QUEUE RETRY] Image upload will retry later: ${error.message}`);
+    throw error;
+  }
 }
