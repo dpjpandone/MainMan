@@ -216,7 +216,7 @@ setAttachmentDeleteMode(false);
         await wrapWithSync('restoreProcedureState', async () => {
           const { data, error } = await supabase
             .from('procedures')
-.select('description, image_urls, file_urls, file_labels, captions')
+            .select('description, image_urls, file_urls, file_labels, captions')
             .eq('id', item.id)
             .single();
   
@@ -244,26 +244,61 @@ setAttachmentDeleteMode(false);
     }
   };
         
-  const handleImagePick = async () => {
-    await handleImageSelection({
-      procedureId: item.id,
-      imageUrls,
-      setImageUrls,
-      scrollToEnd: scrollToGalleryEnd,
-    });
-  
-    setGalleryKey(prev => prev + 1);
-  };
+const lastPickedFileNameRef = useRef(null); // ✅ Add this near your top-level hooks
+
+const handleImagePick = async () => {
+  await handleImageSelection({
+    procedureId: item.id,
+    imageUrls,
+    setImageUrls,
+    onImagePicked: ({ fileName }) => {
+      lastPickedFileNameRef.current = fileName;
+    },
+  });
+
+  // 💡 Delay scroll until image is rendered (allow layout pass)
+  setTimeout(() => {
+    scrollToGalleryEnd();
+  }, 750); // 200ms is usually safe, but feel free to tune
+  setGalleryKey(prev => prev + 1);
+};
 
 const handleSaveCaption = async (captionText) => {
-  setCaptions(prev => ({
+  // ✅ Optimistic update
+setCaptions(prev => {
+  const isLocal = captionTargetUri.startsWith('file://');
+  const matchingSupabaseUrl = isLocal
+    ? imageUrls.find(u => !u.startsWith('file://') && u.includes(lastPickedFileNameRef.current))
+    : null;
+
+  const keyToUse = matchingSupabaseUrl || captionTargetUri;
+
+  return {
     ...prev,
     image: {
       ...prev.image,
-      [captionTargetUri]: captionText,
+      [keyToUse]: captionText,
     },
-  }));
+  };
+});
+
+  // ✅ Close modal
   setCaptionModalVisible(false);
+
+  // ✅ Queue caption job if image hasn't synced yet
+  if (captionTargetUri?.startsWith('file://')) {
+    const fileName = lastPickedFileNameRef.current;
+    if (fileName) {
+tryNowOrQueue('setImageCaptionDeferred', {
+  procedureId: item.id,
+  localUri: captionTargetUri,
+  caption: captionText,
+  fileName,
+});
+    } else {
+addInAppLog('[CAPTION SYNC] Skipped caption queue — no fileName available.');
+    }
+  }
 };
   //main return
 

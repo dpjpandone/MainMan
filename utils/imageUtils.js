@@ -176,7 +176,13 @@ export async function deleteProcedureImage({
   }
 }
 
-export async function handleImageSelection({ procedureId, imageUrls, setImageUrls, scrollToEnd }) {
+export async function handleImageSelection({
+  procedureId,
+  imageUrls,
+  setImageUrls,
+  scrollToEnd,
+  onImagePicked, // ✅ new
+}) {
   try {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -192,10 +198,16 @@ export async function handleImageSelection({ procedureId, imageUrls, setImageUrl
 
     const fileName = `${procedureId}-${Date.now()}.jpg`;
 
-    // 1. Optimistically add local image to gallery
+    // 1. Optimistically display
     const updated = [...imageUrls, localUri];
     setImageUrls(updated);
 
+    // 2. Provide fileName back to caller (for caption sync)
+    if (typeof onImagePicked === 'function') {
+      onImagePicked({ localUri, fileName });
+    }
+
+    // 3. Queue image upload
     await tryNowOrQueue('uploadProcedureImage', {
       localUri,
       procedureId,
@@ -204,11 +216,10 @@ export async function handleImageSelection({ procedureId, imageUrls, setImageUrl
 
     addInAppLog(`[QUEUE ATTEMPT] Image queued or executed: ${fileName}`);
 
-    
-loadJobs().then(jobs => {
-  const count = jobs.filter(j => j.label === 'uploadProcedureImage').length;
-  addInAppLog(`[DEBUG] Total queued image uploads: ${count}`);
-});
+    loadJobs().then(jobs => {
+      const count = jobs.filter(j => j.label === 'uploadProcedureImage').length;
+      addInAppLog(`[DEBUG] Total queued image uploads: ${count}`);
+    });
 
     if (scrollToEnd) {
       setTimeout(scrollToEnd, 300);
@@ -218,7 +229,14 @@ loadJobs().then(jobs => {
   }
 }
 
-export async function uploadImageToSupabase({ localUri, procedureId, fileName }) {
+export async function uploadImageToSupabase({
+  localUri,
+  procedureId,
+  fileName,
+  imageUrls,
+  setImageUrls,
+  setCaptions = undefined, // ✅ default safe
+}) {
   const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_BUCKET}/${fileName}`;
   addInAppLog(`[START] Uploading image for procedure: ${procedureId}`);
   addInAppLog(`[DEBUG] Local URI: ${localUri}`);
@@ -267,25 +285,42 @@ export async function uploadImageToSupabase({ localUri, procedureId, fileName })
     const current = procData?.image_urls || [];
     const updated = current.includes(publicUrl) ? current : [...current, publicUrl];
 
-    const { error: updateError } = await supabase
-      .from('procedures')
-      .update({ image_urls: updated })
-      .eq('id', procedureId);
+const { error: updateError } = await supabase
+  .from('procedures')
+  .update({ image_urls: updated })
+  .eq('id', procedureId);
 
-    if (updateError) throw updateError;
+if (updateError) throw updateError;
 
-    addInAppLog(`[UPLOAD] Image uploaded and database updated: ${publicUrl}`);
+addInAppLog(`[UPLOAD] Image uploaded and database updated: ${publicUrl}`);
 
-    if (localUri.startsWith('file://')) {
-      try {
-        await FileSystem.deleteAsync(localUri, { idempotent: true });
-        addInAppLog(`[CLEANUP] Deleted local image after upload: ${localUri}`);
-      } catch (cleanupError) {
-        addInAppLog(`[CLEANUP FAIL] Could not delete local image: ${cleanupError.message}`);
-      }
-    }
-  } catch (error) {
-    addInAppLog(`[QUEUE RETRY] Image upload will retry later: ${error.message}`);
-    throw error;
+// 🧠 Patch captions in memory if available
+if (typeof setCaptions === 'function') {
+  setCaptions(prev => {
+    const oldCaption = prev?.image?.[localUri];
+    if (!oldCaption) return prev;
+
+    const updatedImage = { ...prev.image };
+    delete updatedImage[localUri];
+    updatedImage[publicUrl] = oldCaption;
+
+    return {
+      ...prev,
+      image: updatedImage,
+    };
+  });
+}
+
+if (localUri.startsWith('file://')) {
+  try {
+    await FileSystem.deleteAsync(localUri, { idempotent: true });
+    addInAppLog(`[CLEANUP] Deleted local image after upload: ${localUri}`);
+  } catch (cleanupError) {
+    addInAppLog(`[CLEANUP FAIL] Could not delete local image: ${cleanupError.message}`);
   }
+}
+} catch (error) {
+  addInAppLog(`[QUEUE RETRY] Image upload will retry later: ${error.message}`);
+  throw error;
+}
 }

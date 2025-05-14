@@ -11,6 +11,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { wrapWithSync, tryNowOrQueue } from './SyncManager';
 import { addInAppLog } from '../utils/InAppLogger';
 import { ImageCaptionPrompt } from '../utils/captionUtils';
+const SHOW_HOURGLASS = true; // 🔁 Toggle to test impact on black thumbnails
 
 export function FileLabelPrompt({ visible, onSubmit, onCancel }) {
     const [label, setLabel] = useState('');
@@ -82,7 +83,7 @@ export async function uploadProcedureFile({
       setFileLabels(updatedLabels);
 
       if (scrollToEnd) {
-        setTimeout(scrollToEnd, 300);
+        setTimeout(scrollToEnd, 300); 
       }
 
       // 🧠 Queue upload job with memory patch support
@@ -312,7 +313,7 @@ const renderImage = (uri, index) => {
 )}
       </View>
 
-      {uri.startsWith('file://') && <PendingHourglass />}
+{SHOW_HOURGLASS && uri.startsWith('file://') && <PendingHourglass />}
 
       {detailsEditMode && !attachmentDeleteMode && (
 <TouchableOpacity

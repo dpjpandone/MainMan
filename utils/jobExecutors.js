@@ -9,17 +9,21 @@ uploadProcedureImage: async ({
   localUri,
   fileName,
   setImageUrls,
-  imageUrls,        // ✅ Include these so uploadImageToSupabase can patch memory
+  imageUrls,
+  captions,        // ✅ NEW
+  setCaptions,     // ✅ NEW
 }) => {
   addInAppLog(`[EXECUTOR] Starting image upload: ${localUri}`);
   try {
-    await uploadImageToSupabase({
-      procedureId,
-      localUri,
-      fileName,
-      setImageUrls,
-      imageUrls,
-    });
+await uploadImageToSupabase({
+  procedureId,
+  localUri,
+  fileName,
+  imageUrls,
+  setImageUrls,
+  captions,      // ✅ NEW
+  setCaptions,   // ✅ NEW
+});
     addInAppLog(`[EXECUTOR] Image uploaded successfully: ${localUri}`);
   } catch (err) {
     addInAppLog(`[EXECUTOR] Image upload failed: ${err.message}`);
@@ -112,33 +116,45 @@ saveProcedureDescription: async ({
   addInAppLog(`[EXECUTOR] Saving procedure metadata for: ${procedureId}`);
 
   // Re-fetch synced attachment URLs to avoid saving stale file:// URIs
-  const { data: procData, error: fetchError } = await supabase
-    .from('procedures')
-    .select('image_urls, file_urls, file_labels')
-    .eq('id', procedureId)
-    .single();
+const { data: procData, error: fetchError } = await supabase
+  .from('procedures')
+  .select('image_urls, file_urls, file_labels, captions')
+  .eq('id', procedureId)
+  .single();
 
   if (fetchError) {
     addInAppLog(`[EXECUTOR] Failed to fetch procedure before save: ${fetchError.message}`);
     throw fetchError;
   }
 
-  const {
-    image_urls = [],
-    file_urls = [],
-    file_labels = [],
-  } = procData;
+const {
+  image_urls = [],
+  file_urls = [],
+  file_labels = [],
+  captions: existingCaptions = { image: {}, file: {} },
+} = procData;
 
-  const { error: updateError } = await supabase
-    .from('procedures')
-    .update({
-      description,
-      image_urls,  // Use Supabase URLs
-      file_urls,
-      file_labels,
-      captions,
-    })
-    .eq('id', procedureId);
+const mergedCaptions = {
+  image: {
+    ...existingCaptions.image,
+    ...captions.image,
+  },
+  file: {
+    ...existingCaptions.file,
+    ...captions.file,
+  },
+};
+
+const { error: updateError } = await supabase
+  .from('procedures')
+  .update({
+    description,
+    image_urls,  // Use Supabase URLs
+    file_urls,
+    file_labels,
+    captions: mergedCaptions, // ✅ merge local + remote to prevent data loss
+  })
+  .eq('id', procedureId);
 
   if (updateError) {
     addInAppLog(`[EXECUTOR] Failed to update procedure: ${updateError.message}`);
@@ -189,4 +205,57 @@ saveProcedureDescription: async ({
       throw err;
     }
   },
+
+setImageCaptionDeferred: async ({ procedureId, localUri, caption, fileName }) => {
+  addInAppLog(`[EXECUTOR] Attempting deferred caption sync for: ${localUri}`);
+
+  const { data, error } = await supabase
+    .from('procedures')
+    .select('image_urls, captions')
+    .eq('id', procedureId)
+    .single();
+
+  if (error) {
+    addInAppLog(`[DEFERRED] ❌ Failed to fetch procedure: ${error.message}`);
+    throw new Error(`[DEFERRED] Failed to fetch procedure: ${error.message}`);
+  }
+
+  const { image_urls = [], captions = { image: {}, file: {} } } = data;
+
+  // 🧠 Parse fallback filename if not passed
+  const fallbackName = localUri.split('/').pop();
+  const nameToUse = fileName || fallbackName;
+
+  addInAppLog(`[DEFERRED] fileName parsed: ${nameToUse}`);
+  addInAppLog(`[DEFERRED] Searching image_urls: ${JSON.stringify(image_urls)}`);
+
+  const matchedUrl = image_urls.find((url) => url.includes(nameToUse));
+
+  if (!matchedUrl) {
+    addInAppLog(`[DEFERRED] ❌ No Supabase URL found for fileName: ${nameToUse}`);
+    throw new Error('[DEFERRED] Supabase URL not available yet');
+  }
+
+  const updatedCaptions = {
+    ...captions,
+    image: {
+      ...(captions.image || {}),
+      [matchedUrl]: caption,
+    },
+    file: captions.file || {},
+  };
+
+  const { error: updateError } = await supabase
+    .from('procedures')
+    .update({ captions: updatedCaptions })
+    .eq('id', procedureId);
+
+  if (updateError) {
+    addInAppLog(`[DEFERRED] ❌ Failed to update caption: ${updateError.message}`);
+    throw new Error(`[DEFERRED] Failed to update caption: ${updateError.message}`);
+  }
+
+  addInAppLog(`[DEFERRED] ✅ Caption synced for: ${matchedUrl}`);
+}
+
 };
