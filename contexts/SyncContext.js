@@ -75,42 +75,6 @@ export const SyncProvider = ({ children }) => {
 export const useSync = () => useContext(SyncContext);
 
 
-// ---------------------------
-// SYNC WARNING
-// ---------------------------
-export function SyncWarning() {
-  const { isSyncing } = useSync();
-  const dotCount = useRef(0);
-  const [dots, setDots] = useState('');
-  const [shouldRender, setShouldRender] = useState(false);
-
-  useEffect(() => {
-    let delayTimer;
-    if (isSyncing) {
-      delayTimer = setTimeout(() => setShouldRender(true), 300);
-    } else {
-      setShouldRender(false);
-    }
-    return () => clearTimeout(delayTimer);
-  }, [isSyncing]);
-
-  useEffect(() => {
-    if (!shouldRender) return;
-    const interval = setInterval(() => {
-      dotCount.current = (dotCount.current + 1) % 4;
-      setDots('.'.repeat(dotCount.current));
-    }, 400);
-    return () => clearInterval(interval);
-  }, [shouldRender]);
-
-  if (!shouldRender) return null;
-
-  return (
-    <View>
-      <Text>LOADING MAINFRAME{dots}</Text>
-    </View>
-  );
-}
 export function FailedSyncBanner() {
   const { failedJobs } = useSync();
   console.log('[CHECK] Current failedJobs:', failedJobs);

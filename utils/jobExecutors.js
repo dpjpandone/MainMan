@@ -66,26 +66,27 @@ uploadProcedureFile: async ({
   }
 },
 
-  updateProcedureSettings: async ({ procedureId, intervalDays, selectedDate, userId }) => {
-    addInAppLog(`[EXECUTOR] Updating procedure settings: ${procedureId}`);
-    const body = {
-      interval_days: parseInt(intervalDays),
-      last_completed: selectedDate ? new Date(selectedDate).toISOString() : null,
-      completed_by: selectedDate ? userId : null,
-    };
+updateProcedureSettings: async ({ procedureId, intervalDays, selectedDate, userId }) => {
+  addInAppLog(`[EXECUTOR] Updating procedure settings: ${procedureId}`);
+  const body = {
+    interval_days: parseInt(intervalDays),
+    last_completed: selectedDate ? new Date(selectedDate).toISOString() : null,
+    completed_by: selectedDate ? userId : null,
+  };
 
-    const { error } = await supabase
-      .from('procedures')
-      .update(body)
-      .eq('id', procedureId);
+  const { error } = await supabase
+    .from('procedures')
+    .update(body)
+    .eq('id', procedureId);
 
-    if (error) {
-      addInAppLog(`[EXECUTOR] Failed to update settings: ${error.message}`);
-      throw error;
-    }
+  if (error) {
+    addInAppLog(`[EXECUTOR] Failed to update settings: ${error.message}`);
+    throw error;
+  }
 
-    addInAppLog(`[EXECUTOR] Procedure settings updated: ${procedureId}`);
-  },
+  addInAppLog(`[EXECUTOR] Procedure settings updated: ${procedureId}`);
+  notifyJobComplete('updateProcedureSettings', { procedureId }); // ✅ now included
+},
 
   markProcedureComplete: async ({ procedureId, intervalDays, userId }) => {
     addInAppLog(`[EXECUTOR] Marking procedure complete: ${procedureId}`);

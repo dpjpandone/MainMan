@@ -6,7 +6,6 @@ import { styles } from '../styles/globalStyles';
 import { FullscreenImageViewerController, deleteProcedureImage, uploadProcedureImage } from '../utils/imageUtils';
 import { supabase, SUPABASE_BUCKET } from '../utils/supaBaseConfig';
 import { wrapWithSync } from '../utils/SyncManager';
-import { SyncWarning } from '../contexts/SyncContext';
 import { InteractionManager } from 'react-native';
 import { uploadProcedureFile, deleteProcedureFile, AttachmentGridViewer, FileLabelPrompt } from '../utils/fileUtils';
 import * as Linking from 'expo-linking';
@@ -16,6 +15,12 @@ import { handleImageSelection } from '../utils/imageUtils';
 import { tryNowOrQueue, subscribeToJobComplete } from '../utils/SyncManager';
 import { CaptionPrompt } from '../utils/captionUtils';
 import { addInAppLog } from '../utils/InAppLogger';
+
+function isProcedurePastDue(item) {
+  const lastCompleted = item?.last_completed ? new Date(item.last_completed) : null;
+  const intervalDays = item?.interval_days || 0;
+  return !lastCompleted || (Math.floor((Date.now() - lastCompleted) / 86400000) > intervalDays);
+}
 
 export default function ProcedureCard({ item, onComplete, onDelete, refreshMachine }) {
 
@@ -38,7 +43,7 @@ const [attachmentDeleteMode, setAttachmentDeleteMode] = useState(false);
 
   const lastCompleted = item.last_completed ? new Date(item.last_completed) : null;
   const intervalDays = item.interval_days || 0;
-  const isPastDue = !lastCompleted || (Math.floor((Date.now() - lastCompleted) / 86400000) > intervalDays);
+const isPastDue = isProcedurePastDue(item);
   const [galleryKey, setGalleryKey] = useState(0);
 const [captions, setCaptions] = useState(item.captions || { image: {}, file: {} });
 const [captionModalVisible, setCaptionModalVisible] = useState(false);
@@ -51,7 +56,7 @@ const renderLinkedDescription = (text) => {
         return (
           <Text
             key={index}
-            style={{ color: '#0af' }}
+            style={styles.linkText}
             onPress={() => Linking.openURL(part)}
           >
             {part}
@@ -83,16 +88,10 @@ const renderLinkedDescription = (text) => {
   
         if (error) throw error;
   
-        const newLastCompleted = data.last_completed ? new Date(data.last_completed) : null;
-        const newInterval = data.interval_days || 0;
-  
-        const overdue =
-          !newLastCompleted ||
-          Math.floor((Date.now() - newLastCompleted) / 86400000) > newInterval;
-  
-        setBgColor(overdue ? '#e4001e' : '#003300');
-      });
-    };
+const overdue = isProcedurePastDue(data);
+setBgColor(overdue ? '#e4001e' : '#003300');
+    });
+  };
   
     fetchFreshStatus();
   }, [item.id]);
@@ -130,18 +129,16 @@ const renderLinkedDescription = (text) => {
     let intervalId;
     if (!item) return;
   
-    const lastCompleted = item.last_completed ? new Date(item.last_completed) : null;
-    const intervalDays = item.interval_days || 0;
-    const overdue = !lastCompleted || (Math.floor((Date.now() - lastCompleted) / 86400000) > intervalDays);
-  
-    if (overdue) {
-      intervalId = setInterval(() =>
-        setBgColor(prev => (prev === '#e4001e' ? '#ffff00' : '#e4001e')),
-        500
-      );
-    } else {
-      setBgColor('#003300'); // green
-    }
+const overdue = isProcedurePastDue(item);
+
+if (overdue) {
+  intervalId = setInterval(() =>
+    setBgColor(prev => (prev === '#e4001e' ? '#ffff00' : '#e4001e')),
+    500
+  );
+} else {
+  setBgColor('#003300'); // green
+}
   
     return () => clearInterval(intervalId);
   }, [item]);
@@ -385,9 +382,9 @@ addInAppLog('[CAPTION DEBUG] captionTargetUri: ' + captionTargetUri);
                 console.error('Failed to delete procedure:', error);
               }
             }
-          }
+          } 
         ]);
-      }} style={{ position: 'absolute', top: 10, right: 10, zIndex: 1 }}>
+      }} style={styles.closeButton}>
         <Text style={{ color: '#888', fontWeight: 'bold', fontSize: 18 }}>X</Text>
       </TouchableOpacity>
 
@@ -433,9 +430,6 @@ addInAppLog('[CAPTION DEBUG] captionTargetUri: ' + captionTargetUri);
 <Modal visible={modalVisible} transparent={false} animationType="fade">
   <View style={styles.modalOverlay}>
     <StatusBar backgroundColor="#000" barStyle="light-content" />
-    <View style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 }}>
-  <SyncWarning />
-</View>
 
 {detailsEditMode && !keyboardVisible && (
   <>
@@ -461,14 +455,7 @@ addInAppLog('[CAPTION DEBUG] captionTargetUri: ' + captionTargetUri);
 </ScrollView>
 ) : (
     <TextInput
-      style={[
-        styles.input,
-        {
-          textAlignVertical: 'top',
-          padding: 10,
-          height: 220, // fixed height for predictability
-        }
-      ]}
+      style={[styles.input, styles.textInputLarge]}
       placeholder="Enter description..."
       placeholderTextColor="#777"
       multiline
@@ -521,7 +508,7 @@ addInAppLog('[CAPTION DEBUG] captionTargetUri: ' + captionTargetUri);
           }}
         />
       ) : (
-        <Text style={{ color: '#888', textAlign: 'center' }}>No Attachments</Text>
+      <Text style={styles.galleryEmptyText}>No Attachments</Text>
       )}
     </ScrollView>
   </View>

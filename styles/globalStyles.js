@@ -441,6 +441,28 @@ captionText: {
   marginTop: 2,
   textAlign: 'center',
   maxWidth: 100,
+},
+galleryEmptyText: {
+  color: '#888',
+  textAlign: 'center',
+},
+closeButton: {
+  position: 'absolute',
+  top: 10,
+  right: 10,
+  zIndex: 1,
+},
+textInputLarge: {
+  textAlignVertical: 'top',
+  padding: 10,
+  height: 220,
+},
+modalTopOverlay: {
+  position: 'absolute',
+  top: 0,
+  left: 0,
+  right: 0,
+  zIndex: 10,
 }
 
 });

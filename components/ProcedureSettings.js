@@ -13,7 +13,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { styles } from '../styles/globalStyles';
 import { supabase } from '../utils/supaBaseConfig';
 import { wrapWithSync } from '../utils/SyncManager';
-import { SyncWarning } from '../contexts/SyncContext';
 import { tryNowOrQueue } from '../utils/SyncManager';
 
 export default function ProcedureSettings({ visible, onClose, procedureId }) {
@@ -97,7 +96,6 @@ export default function ProcedureSettings({ visible, onClose, procedureId }) {
   return (
     <Modal visible={visible} transparent={false} animationType="slide">
       <View style={{ flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' }}>
-        <SyncWarning />
         <View style={styles.modalContainer}>
           <View style={{ alignItems: 'center', marginTop: 10, marginBottom: 20 }}>
             <Text style={{ color: '#0f0', fontSize: 22, fontWeight: 'bold' }}>Procedure Settings</Text>
