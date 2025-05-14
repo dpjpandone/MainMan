@@ -4,16 +4,28 @@ import { SUPABASE_URL, SUPABASE_BUCKET, SUPABASE_KEY, supabase } from './supaBas
 import { addInAppLog } from '../utils/InAppLogger';
 
 export const jobExecutors = {
-  uploadProcedureImage: async (payload) => {
-    addInAppLog(`[EXECUTOR] Starting image upload: ${payload.localUri}`);
-    try {
-      await uploadImageToSupabase(payload);
-      addInAppLog(`[EXECUTOR] Image uploaded successfully: ${payload.localUri}`);
-    } catch (err) {
-      addInAppLog(`[EXECUTOR] Image upload failed: ${err.message}`);
-      throw err;
-    }
-  },
+uploadProcedureImage: async ({
+  procedureId,
+  localUri,
+  fileName,
+  setImageUrls,
+  imageUrls,        // ✅ Include these so uploadImageToSupabase can patch memory
+}) => {
+  addInAppLog(`[EXECUTOR] Starting image upload: ${localUri}`);
+  try {
+    await uploadImageToSupabase({
+      procedureId,
+      localUri,
+      fileName,
+      setImageUrls,
+      imageUrls,
+    });
+    addInAppLog(`[EXECUTOR] Image uploaded successfully: ${localUri}`);
+  } catch (err) {
+    addInAppLog(`[EXECUTOR] Image upload failed: ${err.message}`);
+    throw err;
+  }
+},
 
 uploadProcedureFile: async ({
   localUri,

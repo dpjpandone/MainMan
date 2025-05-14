@@ -6,9 +6,11 @@ export function CaptionPrompt({ visible, onSubmit, onCancel, initialCaption = ''
   const [caption, setCaption] = useState(initialCaption);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
 
-  useEffect(() => {
+useEffect(() => {
+  if (visible) {
     setCaption(initialCaption || '');
-  }, [initialCaption]);
+  }
+}, [visible, initialCaption]);
 
   useEffect(() => {
     const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
