@@ -280,6 +280,8 @@ const handleImagePick = async () => {
     procedureId: item.id,
     imageUrls,
     setImageUrls,
+    captions,
+    setCaptions,
     onImagePicked: ({ fileName }) => {
       lastPickedFileNameRef.current = fileName;
     },
