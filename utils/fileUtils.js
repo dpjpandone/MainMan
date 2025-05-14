@@ -229,10 +229,8 @@ export async function uploadFileToSupabase({
           ? publicUrl
           : uri
       );
-      const updatedLabelsInMemory = [...fileLabels];
 
       setFileUrls(updatedUrlsInMemory);
-      setFileLabels(updatedLabelsInMemory);
 
       addInAppLog(`[MEMORY PATCH] Final fileUrls: ${JSON.stringify(updatedUrlsInMemory)}`);
     }
