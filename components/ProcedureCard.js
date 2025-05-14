@@ -15,6 +15,7 @@ import ProcedureSettings from './ProcedureSettings';
 import { handleImageSelection } from '../utils/imageUtils';
 import { tryNowOrQueue, subscribeToJobComplete } from '../utils/SyncManager';
 import { CaptionPrompt } from '../utils/captionUtils';
+import { addInAppLog } from '../utils/InAppLogger';
 
 export default function ProcedureCard({ item, onComplete, onDelete, refreshMachine }) {
 
@@ -147,8 +148,8 @@ const renderLinkedDescription = (text) => {
 
 useEffect(() => {
   const unsubscribe = subscribeToJobComplete((label, payload) => {
-    console.log('[DEBUG] ProcedureCard callback fired:', label, payload);
-    console.log(`[CALLBACK] Job complete received in ProcedureCard: ${label}`);
+addInAppLog('[DEBUG] ProcedureCard callback fired: label=' + label + ', payload=' + JSON.stringify(payload));
+    addInAppLog(`[CALLBACK] Job complete received in ProcedureCard: ${label}`);
 
     try {
       if (
@@ -156,13 +157,13 @@ useEffect(() => {
         payload.procedureId === item.id &&
         typeof refreshMachine === 'function'
       ) {
-        console.log(`[UI PATCH] Job complete for ${label} — refreshing machine`);
+        addInAppLog(`[UI PATCH] Job complete for ${label} — refreshing machine`);
         refreshMachine();
       } else {
-        console.log(`[SKIP] Unmatched or invalid callback context in ProcedureCard`);
+        addInAppLog(`[SKIP] Unmatched or invalid callback context in ProcedureCard`);
       }
     } catch (err) {
-      console.log(`[ERROR] ProcedureCard callback crash: ${err.message}`);
+      addInAppLog(`[ERROR] ProcedureCard callback crash: ${err.message}`);
     }
   });
 
@@ -184,7 +185,7 @@ await wrapWithSync('loadProcedureDetails', async () => {
     .single();
 
   if (error || !data) {
-    console.log('Procedure not found or error:', error);
+addInAppLog('[MODAL ERROR] Procedure not found or error: ' + (error?.message || 'unknown error'));
     return;
   }
 
@@ -193,7 +194,7 @@ const cleanedUrls = (data.image_urls || []).filter(uri => uri.startsWith('http')
 setImageUrls(cleanedUrls);
 setGalleryKey(prev => prev + 1);
 setCaptions(data.captions || { image: {}, file: {} });
-console.log('[DEBUG] Captions object received from Supabase:', data.captions);
+addInAppLog('[DEBUG] Captions object received from Supabase: ' + JSON.stringify(data.captions));
 
   setFileUrls(data.file_urls || []);
   setFileLabels(data.file_labels || []);
@@ -202,7 +203,7 @@ console.log('[DEBUG] Captions object received from Supabase:', data.captions);
 setDetailsEditMode(false);
 setAttachmentDeleteMode(false);
     } catch (err) {
-      console.log('[SAFE FAIL] openModal failed but UI continues');
+      addInAppLog('[SAFE FAIL] openModal failed but UI continues');
     }
   };
           
@@ -258,7 +259,7 @@ setGalleryKey(prev => prev + 1);
           setFileLabels(data.file_labels || []);
         });
       } catch (err) {
-        console.log('[BACK FALLBACK] Failed to restore data, exiting anyway.');
+        addInAppLog('[BACK FALLBACK] Failed to restore data, exiting anyway.');
       } finally {
         // ✅ Always exit edit mode
 setDetailsEditMode(false);
@@ -282,8 +283,16 @@ const handleImagePick = async () => {
     setImageUrls,
     captions,
     setCaptions,
-    onImagePicked: ({ fileName }) => {
+    onImagePicked: ({ localUri, fileName }) => {
       lastPickedFileNameRef.current = fileName;
+
+      if (captions?.image?.[localUri]) {
+        tryNowOrQueue('setImageCaptionDeferred', {
+          procedureId: item.id,
+          localUri,
+          fileName,
+        });
+      }
     },
   });
 
@@ -294,41 +303,49 @@ const handleImagePick = async () => {
   setGalleryKey(prev => prev + 1);
 };
 
+
 const handleSaveCaption = async (captionText) => {
   // ✅ Optimistic update
-setCaptions(prev => {
-  const isLocal = captionTargetUri.startsWith('file://');
-  const matchingSupabaseUrl = isLocal
-    ? imageUrls.find(u => !u.startsWith('file://') && u.includes(lastPickedFileNameRef.current))
-    : null;
+  setCaptions(prev => {
+    const isLocal = captionTargetUri.startsWith('file://');
+    const matchingSupabaseUrl = isLocal
+      ? imageUrls.find(u => !u.startsWith('file://') && u.includes(lastPickedFileNameRef.current))
+      : null;
 
-  const keyToUse = matchingSupabaseUrl || captionTargetUri;
+    const keyToUse = matchingSupabaseUrl || captionTargetUri;
 
-  return {
-    ...prev,
-    image: {
-      ...prev.image,
-      [keyToUse]: captionText,
-    },
-  };
-});
+    return {
+      ...prev,
+      image: {
+        ...prev.image,
+        [keyToUse]: captionText,
+      },
+    };
+  });
 
   // ✅ Close modal
   setCaptionModalVisible(false);
 
   // ✅ Queue caption job if image hasn't synced yet
   if (captionTargetUri?.startsWith('file://')) {
+    addInAppLog('[CAPTION DEBUG] About to evaluate caption queue conditions');
+addInAppLog('[CAPTION DEBUG] captionTargetUri: ' + captionTargetUri);
+    addInAppLog('[CAPTION DEBUG] fileName ref: ' + lastPickedFileNameRef.current);
+
     const fileName = lastPickedFileNameRef.current;
     if (fileName) {
-tryNowOrQueue('setImageCaptionDeferred', {
-  procedureId: item.id,
-  localUri: captionTargetUri,
-  caption: captionText,
-  fileName,
-});
+      tryNowOrQueue('setImageCaptionDeferred', {
+        procedureId: item.id,
+        localUri: captionTargetUri,
+        caption: captionText,
+        fileName,
+      });
+      addInAppLog('[CAPTION SYNC] Caption job queued for: ' + fileName);
     } else {
-console.log('[CAPTION SYNC] Skipped caption queue — no fileName available.');
+      addInAppLog('[CAPTION SYNC] Skipped caption queue — no fileName available.');
     }
+  } else {
+    addInAppLog('[CAPTION DEBUG] captionTargetUri is not local — skipping caption queue.');
   }
 };
   //main return

@@ -9,7 +9,7 @@ const activeSyncs = {};
 
 // Start a sync operation with a label
 export function startSync(label = 'anonymous') {
-  console.log(`[SYNC START] ${label}`);
+  addInAppLog(`[SYNC START] ${label}`);
   activeSyncs[label] = Date.now();
   setGlobalSyncing(true);
 }
@@ -18,7 +18,7 @@ export function startSync(label = 'anonymous') {
 export function endSync(label = 'anonymous') {
   if (activeSyncs[label]) {
     const duration = Date.now() - activeSyncs[label];
-    console.log(`[SYNC END] ${label} (${duration}ms)`);
+    addInAppLog(`[SYNC END] ${label} (${duration}ms)`);
     delete activeSyncs[label];
     if (Object.keys(activeSyncs).length === 0) {
       setGlobalSyncing(false);
@@ -33,7 +33,7 @@ export async function wrapWithSync(label, fn) {
     await new Promise((res) => setTimeout(res, 0));
     return await fn();
   } catch (err) {
-    console.log(`[SYNC] ${label} failed, triggering UI warning.`);
+    addInAppLog(`[SYNC] ${label} failed, triggering UI warning.`);
     setGlobalSyncFailed(true);
     return null; // 👈 prevent unhandled rejection
   } finally {

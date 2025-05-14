@@ -285,8 +285,6 @@ export function AttachmentGridViewer({
   );
 
 const renderImage = (uri, index) => {
-  console.log('[DEBUG] Rendering thumbnail for:', uri);
-  console.log('[DEBUG] Caption for this image:', captions?.image?.[uri]);
 
   return (
     <View key={`img-${index}`} style={{ position: 'relative' }}>
