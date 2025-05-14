@@ -109,7 +109,8 @@ updateProcedureSettings: async ({ procedureId, intervalDays, selectedDate, userI
       throw error;
     }
 
-    addInAppLog(`[EXECUTOR] Procedure marked complete: ${procedureId}`);
+addInAppLog(`[EXECUTOR] Procedure marked complete: ${procedureId}`);
+notifyJobComplete('markProcedureComplete', { procedureId }); // ✅ add this
   },
 
 saveProcedureDescription: async ({
@@ -262,7 +263,8 @@ setImageCaptionDeferred: async ({ procedureId, localUri, caption, fileName }) =>
     throw new Error(`[DEFERRED] Failed to update caption: ${updateError.message}`);
   }
 
-  addInAppLog(`[DEFERRED] ✅ Caption synced for: ${matchedUrl}`);
+addInAppLog(`[DEFERRED] ✅ Caption synced for: ${matchedUrl}`);
+notifyJobComplete('setImageCaptionDeferred', { procedureId }); 
 }
 
 };
