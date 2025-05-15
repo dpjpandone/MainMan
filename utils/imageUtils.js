@@ -290,7 +290,8 @@ export async function uploadImageToSupabase({
     if (updateError) throw updateError;
 
     // ✅ Memory patch to replace stale file:// with public URL
-if (setImageUrls && Array.isArray(imageUrls)) {
+
+    if (setImageUrls && Array.isArray(imageUrls)) {
   addInAppLog(`[DEBUG] imageUrls before patch: ${JSON.stringify(imageUrls)}`);
   addInAppLog(`[DEBUG] localUri for memory patch: ${localUri}`);
   addInAppLog(`[DEBUG] publicUrl for memory patch: ${publicUrl}`);
@@ -308,9 +309,6 @@ const patched = imageUrls.map(uri => {
 if (!didPatch && !patched.includes(publicUrl)) {
   patched.push(publicUrl);
 }
-
-setImageUrls(patched);
-addInAppLog(`[PATCH] Final in-memory imageUrls: ${JSON.stringify(patched)}`);
 
   setImageUrls(patched);
   addInAppLog(`[PATCH] Updated in-memory imageUrls: ${JSON.stringify(patched)}`);

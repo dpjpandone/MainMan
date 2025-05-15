@@ -67,6 +67,7 @@ uploadProcedureFile: async ({
 },
 
 updateProcedureSettings: async ({ procedureId, intervalDays, selectedDate, userId }) => {
+  addInAppLog(`[DEBUG] Executor triggered for updateProcedureSettings`);
   addInAppLog(`[EXECUTOR] Updating procedure settings: ${procedureId}`);
   const body = {
     interval_days: parseInt(intervalDays),
