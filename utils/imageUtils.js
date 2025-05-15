@@ -234,10 +234,7 @@ export async function uploadImageToSupabase({
 }) {
   const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_BUCKET}/${fileName}`;
 
-  addInAppLog(`[START] Uploading image for procedure: ${procedureId}`);
-  addInAppLog(`[DEBUG] Local URI: ${localUri}`);
-  addInAppLog(`[DEBUG] Target fileName: ${fileName}`);
-  addInAppLog(`[DEBUG] Expected public URL: ${publicUrl}`);
+addInAppLog(`[UPLOAD] Starting image upload to Supabase: ${fileName}`);
 
   const { data: procDataCheck, error: checkError } = await supabase
     .from('procedures')

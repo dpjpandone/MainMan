@@ -124,37 +124,24 @@ saveProcedureDescription: async ({
 }) => {
   addInAppLog(`[EXECUTOR] Saving procedure metadata for: ${procedureId}`);
 
-  // 1. Re-fetch synced image URLs to avoid wiping out live state
-  const { data: fresh, error: fetchError } = await supabase
-    .from('procedures')
-    .select('image_urls')
-    .eq('id', procedureId)
-    .single();
+  // Re-fetch synced image URLs to avoid wiping out live state
 
-  if (fetchError) {
-    addInAppLog(`[EXECUTOR] Failed to fetch procedure before save: ${fetchError.message}`);
-    throw fetchError;
-  }
 
-  const syncedUrls = (fresh?.image_urls || []).filter(uri => uri.startsWith('http'));
-  const localUrls = (imageUrls || []).filter(uri => uri.startsWith('http'));
-  const mergedUrls = Array.from(new Set([...syncedUrls, ...localUrls]));
-
-  // 2. Strip out stale captions for file:// URIs
-// 2. Merge existing and new captions to avoid overwriting
-const { data: procData, error: captionFetchError } = await supabase
+const { data: fresh, error: fetchError } = await supabase
   .from('procedures')
-  .select('captions')
+  .select('image_urls, captions')
   .eq('id', procedureId)
   .single();
 
-if (captionFetchError) {
-  addInAppLog(`[EXECUTOR] Failed to fetch existing captions: ${captionFetchError.message}`);
-  throw captionFetchError;
+if (fetchError) {
+  addInAppLog(`[EXECUTOR] Failed to fetch procedure metadata: ${fetchError.message}`);
+  throw fetchError;
 }
+const syncedUrls = (fresh?.image_urls || []).filter(uri => uri.startsWith('http'));
+const localUrls = (imageUrls || []).filter(uri => uri.startsWith('http'));
+const mergedUrls = Array.from(new Set([...syncedUrls, ...localUrls]));
 
-const existingCaptions = procData?.captions || { image: {}, file: {} };
-
+const existingCaptions = fresh?.captions || { image: {}, file: {} };
 const mergedCaptions = {
   image: {
     ...existingCaptions.image,
@@ -174,7 +161,7 @@ const mergedCaptions = {
       image_urls: mergedUrls,
       file_urls: fileUrls,
       file_labels: fileLabels,
-captions: mergedCaptions,
+      captions: mergedCaptions,
     })
     .eq('id', procedureId);
 
