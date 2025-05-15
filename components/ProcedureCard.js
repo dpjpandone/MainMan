@@ -222,10 +222,10 @@ setAttachmentDeleteMode(false);
 await tryNowOrQueue('saveProcedureDescription', {
   procedureId: item.id,
   description,
-  imageUrls,
+  imageUrls: imageUrls.filter(uri => uri.startsWith('http')), // ✅ Clean here
   fileUrls,
-  fileLabels, 
-  captions,   
+  fileLabels,
+  captions,
 });
   
 setDetailsEditMode(false);

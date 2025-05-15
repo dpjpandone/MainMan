@@ -124,24 +124,36 @@ saveProcedureDescription: async ({
 }) => {
   addInAppLog(`[EXECUTOR] Saving procedure metadata for: ${procedureId}`);
 
-  // Re-fetch synced attachment URLs to avoid saving stale file:// URIs
-const { data: procData, error: fetchError } = await supabase
-  .from('procedures')
-  .select('image_urls, file_urls, file_labels, captions')
-  .eq('id', procedureId)
-  .single();
+  // 1. Re-fetch synced image URLs to avoid wiping out live state
+  const { data: fresh, error: fetchError } = await supabase
+    .from('procedures')
+    .select('image_urls')
+    .eq('id', procedureId)
+    .single();
 
   if (fetchError) {
     addInAppLog(`[EXECUTOR] Failed to fetch procedure before save: ${fetchError.message}`);
     throw fetchError;
   }
 
-const {
-  image_urls = [],
-  file_urls = [],
-  file_labels = [],
-  captions: existingCaptions = { image: {}, file: {} },
-} = procData;
+  const syncedUrls = (fresh?.image_urls || []).filter(uri => uri.startsWith('http'));
+  const localUrls = (imageUrls || []).filter(uri => uri.startsWith('http'));
+  const mergedUrls = Array.from(new Set([...syncedUrls, ...localUrls]));
+
+  // 2. Strip out stale captions for file:// URIs
+// 2. Merge existing and new captions to avoid overwriting
+const { data: procData, error: captionFetchError } = await supabase
+  .from('procedures')
+  .select('captions')
+  .eq('id', procedureId)
+  .single();
+
+if (captionFetchError) {
+  addInAppLog(`[EXECUTOR] Failed to fetch existing captions: ${captionFetchError.message}`);
+  throw captionFetchError;
+}
+
+const existingCaptions = procData?.captions || { image: {}, file: {} };
 
 const mergedCaptions = {
   image: {
@@ -154,16 +166,17 @@ const mergedCaptions = {
   },
 };
 
-const { error: updateError } = await supabase
-  .from('procedures')
-  .update({
-    description,
-    image_urls,  // Use Supabase URLs
-    file_urls,
-    file_labels,
-    captions: mergedCaptions, // ✅ merge local + remote to prevent data loss
-  })
-  .eq('id', procedureId);
+  // 3. Save to Supabase
+  const { error: updateError } = await supabase
+    .from('procedures')
+    .update({
+      description,
+      image_urls: mergedUrls,
+      file_urls: fileUrls,
+      file_labels: fileLabels,
+captions: mergedCaptions,
+    })
+    .eq('id', procedureId);
 
   if (updateError) {
     addInAppLog(`[EXECUTOR] Failed to update procedure: ${updateError.message}`);

@@ -290,29 +290,42 @@ export async function uploadImageToSupabase({
     if (updateError) throw updateError;
 
     // ✅ Memory patch to replace stale file:// with public URL
-
     if (setImageUrls && Array.isArray(imageUrls)) {
-  addInAppLog(`[DEBUG] imageUrls before patch: ${JSON.stringify(imageUrls)}`);
-  addInAppLog(`[DEBUG] localUri for memory patch: ${localUri}`);
-  addInAppLog(`[DEBUG] publicUrl for memory patch: ${publicUrl}`);
+      addInAppLog(`[DEBUG] imageUrls before patch: ${JSON.stringify(imageUrls)}`);
+      addInAppLog(`[DEBUG] localUri for memory patch: ${localUri}`);
+      addInAppLog(`[DEBUG] publicUrl for memory patch: ${publicUrl}`);
 
-let didPatch = false;
-const patched = imageUrls.map(uri => {
-  if (uri.startsWith('file://') && uri.includes(fileName)) {
-    didPatch = true;
-    return publicUrl;
-  }
-  return uri;
-});
+      let didPatch = false;
+      const patched = imageUrls.map(uri => {
+        if (uri.startsWith('file://') && uri.includes(fileName)) {
+          didPatch = true;
+          return publicUrl;
+        }
+        return uri;
+      });
 
-// If no match was found, fallback to appending the public URL
-if (!didPatch && !patched.includes(publicUrl)) {
-  patched.push(publicUrl);
-}
+      // If no match was found, fallback to appending the public URL
+      if (!didPatch && !patched.includes(publicUrl)) {
+        patched.push(publicUrl);
+      }
 
-  setImageUrls(patched);
-  addInAppLog(`[PATCH] Updated in-memory imageUrls: ${JSON.stringify(patched)}`);
-}
+      setImageUrls(patched);
+      addInAppLog(`[PATCH] Updated in-memory imageUrls: ${JSON.stringify(patched)}`);
+
+      // 💾 Ensure Supabase does not keep stale file:// entries
+      if (patched.some(uri => uri.startsWith('http')) && patched.length !== current.length) {
+        const { error: cleanupError } = await supabase
+          .from('procedures')
+          .update({ image_urls: patched })
+          .eq('id', procedureId);
+
+        if (cleanupError) {
+          addInAppLog(`[DB PATCH FAIL] Failed to remove stale URIs: ${cleanupError.message}`);
+        } else {
+          addInAppLog(`[DB PATCH] Removed stale file:// URIs from DB`);
+        }
+      }
+    }
 
     addInAppLog(`[UPLOAD] Image uploaded and database updated: ${publicUrl}`);
 
