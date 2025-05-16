@@ -68,35 +68,54 @@ export async function uploadProcedureFile({
       multiple: false,
     });
 
-    if (!result.canceled && result.assets?.length > 0) {
-      const file = result.assets[0];
-      const localUri = file.uri;
+    if (result.canceled || !result.assets?.length) return;
 
-      const sanitizedLabel = label?.trim().replace(/[^a-z0-9_\-]/gi, '_') || 'Untitled';
-      const fileName = `${sanitizedLabel}-${procedureId}-${Date.now()}.pdf`;
+    const file = result.assets[0];
+    const localUri = file.uri;
 
-      // ✅ Optimistically update local gallery
-      const updatedUrls = [...(fileUrls || []), localUri];
-      const updatedLabels = [...(fileLabels || []), sanitizedLabel];
+    const sanitizedLabel = label?.trim().replace(/[^a-z0-9_\-]/gi, '_') || 'Untitled';
+    const fileName = `${sanitizedLabel}-${procedureId}-${Date.now()}.pdf`;
 
-      setFileUrls(updatedUrls);
-      setFileLabels(updatedLabels);
+    // ✅ Optimistically update local gallery
+    const updatedUrls = [...(fileUrls || []), localUri];
+    const updatedLabels = [...(fileLabels || []), sanitizedLabel];
 
-      if (scrollToEnd) {
-        setTimeout(scrollToEnd, 300); 
+    setFileUrls(updatedUrls);
+    setFileLabels(updatedLabels);
+
+    if (scrollToEnd) {
+      setTimeout(scrollToEnd, 300);
+    }
+
+    const payload = {
+      localUri,
+      label: sanitizedLabel,
+      procedureId,
+      fileName,
+      fileUrls: updatedUrls,
+      setFileUrls,
+      fileLabels: updatedLabels,
+      setFileLabels,
+    };
+
+    try {
+      addInAppLog(`[UPLOAD WRAPPER] Attempting tryNowOrQueue for: ${fileName}`);
+      await tryNowOrQueue('uploadProcedureFile', payload);
+    } catch (err) {
+      addInAppLog(`[UPLOAD WRAPPER] tryNowOrQueue failed: ${err.message}`);
+
+      // 🧠 Check if already queued before adding
+      const jobs = await loadJobs();
+      const exists = jobs.some(
+        (j) => j.label === 'uploadProcedureFile' && JSON.stringify(j.payload) === JSON.stringify(payload)
+      );
+
+      if (!exists) {
+        addInAppLog(`[UPLOAD WRAPPER] Manually adding uploadProcedureFile to queue`);
+        await addJob('uploadProcedureFile', payload);
+      } else {
+        addInAppLog(`[UPLOAD WRAPPER] Job already in queue, skipping addJob`);
       }
-
-      // 🧠 Queue upload job with memory patch support
-      await tryNowOrQueue('uploadProcedureFile', {
-        localUri,
-        label: sanitizedLabel,
-        procedureId,
-        fileName,
-        fileUrls: updatedUrls,
-        setFileUrls,
-        fileLabels: updatedLabels,
-        setFileLabels,
-      });
     }
   } catch (err) {
     addInAppLog(`[ERROR] File selection or queuing failed: ${err.message}`);
@@ -218,31 +237,51 @@ export async function uploadFileToSupabase({
 
     addInAppLog(`[UPLOAD] File uploaded and database updated: ${publicUrl}`);
 
-    // ✅ Patch local memory if available
-    if (setFileUrls && fileUrls && setFileLabels && fileLabels) {
-      addInAppLog(`[PATCH] Attempting to update in-memory file URLs...`);
-      addInAppLog(`[DEBUG] localUri: ${localUri}`);
-      addInAppLog(`[DEBUG] publicUrl: ${publicUrl}`);
+    // ✅ Memory patch: replace localUri with publicUrl
+if (setFileUrls && Array.isArray(fileUrls)) {
+  let didPatch = false;
 
-      const updatedUrlsInMemory = fileUrls.map(uri =>
-        uri.startsWith('file://') && uri.includes(procedureId) && publicUrl.includes(fileName)
-          ? publicUrl
-          : uri
-      );
-
-      setFileUrls(updatedUrlsInMemory);
-
-      addInAppLog(`[MEMORY PATCH] Final fileUrls: ${JSON.stringify(updatedUrlsInMemory)}`);
+  const updatedUrlsInMemory = fileUrls.map(uri => {
+    if (uri === localUri || (uri.startsWith('file://') && uri.includes(fileName))) {
+      didPatch = true;
+      return publicUrl;
     }
+    return uri;
+  });
 
-    if (localUri.startsWith('file://')) {
-      try {
-        await FileSystem.deleteAsync(localUri, { idempotent: true });
-        addInAppLog(`[CLEANUP] Deleted local file after upload: ${localUri}`);
-      } catch (cleanupError) {
-        addInAppLog(`[CLEANUP FAIL] Could not delete local file: ${cleanupError.message}`);
-      }
+  if (!didPatch && !updatedUrlsInMemory.includes(publicUrl)) {
+    updatedUrlsInMemory.push(publicUrl);
+    addInAppLog(`[FALLBACK] Appending publicUrl manually: ${publicUrl}`);
+  }
+
+  setFileUrls(updatedUrlsInMemory);
+  addInAppLog(`[MEMORY PATCH] Final fileUrls: ${JSON.stringify(updatedUrlsInMemory)}`);
+}
+
+
+
+// ✅ Memory patch: replace localUri with publicUrl
+if (setFileUrls && Array.isArray(fileUrls)) {
+  const patched = fileUrls.map(uri =>
+    uri === localUri ? publicUrl : uri
+  );
+  setFileUrls(patched);
+  addInAppLog(`[PATCH] Updated in-memory fileUrls: ${JSON.stringify(patched)}`);
+}
+
+if (localUri.startsWith('file://') && FileSystem.uploadAsync) {
+  try {
+    const info = await FileSystem.getInfoAsync(localUri);
+    if (info.exists) {
+      await FileSystem.deleteAsync(localUri, { idempotent: true });
+      addInAppLog(`[CLEANUP] Deleted local file after upload: ${localUri}`);
+    } else {
+      addInAppLog(`[SKIP] File already missing at cleanup: ${localUri}`);
     }
+  } catch (cleanupError) {
+    addInAppLog(`[CLEANUP FAIL] Could not delete local file: ${cleanupError.message}`);
+  }
+}
 
   } catch (error) {
     addInAppLog(`[QUEUE RETRY] File upload will retry later: ${error.message}`);

@@ -149,16 +149,16 @@ addInAppLog('[DEBUG] ProcedureCard callback fired: label=' + label + ', payload=
     addInAppLog(`[CALLBACK] Job complete received in ProcedureCard: ${label}`);
 
     try {
-      if (
-        label === 'uploadProcedureImage' &&
-        payload.procedureId === item.id &&
-        typeof refreshMachine === 'function'
-      ) {
-        addInAppLog(`[UI PATCH] Job complete for ${label} — refreshing machine`);
-        refreshMachine();
-      } else {
-        addInAppLog(`[SKIP] Unmatched or invalid callback context in ProcedureCard`);
-      }
+if (
+  (label === 'uploadProcedureImage' || label === 'uploadProcedureFile') &&
+  payload.procedureId === item.id &&
+  typeof refreshMachine === 'function'
+) {
+  addInAppLog(`[UI PATCH] Job complete for ${label} — refreshing machine`);
+  refreshMachine();
+} else {
+  addInAppLog(`[SKIP] Unmatched or invalid callback context in ProcedureCard`);
+}
     } catch (err) {
       addInAppLog(`[ERROR] ProcedureCard callback crash: ${err.message}`);
     }

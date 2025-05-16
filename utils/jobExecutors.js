@@ -60,6 +60,7 @@ uploadProcedureFile: async ({
       fileLabels,
     });
     addInAppLog(`[EXECUTOR] File uploaded successfully: ${localUri}`);
+notifyJobComplete('uploadProcedureFile', { procedureId });
   } catch (err) {
     addInAppLog(`[EXECUTOR] File upload failed: ${err.message}`);
     throw err;
@@ -124,42 +125,44 @@ saveProcedureDescription: async ({
 }) => {
   addInAppLog(`[EXECUTOR] Saving procedure metadata for: ${procedureId}`);
 
-  // Re-fetch synced image URLs to avoid wiping out live state
+  // Re-fetch synced URLs to avoid overwriting remote files/images
+  const { data: fresh, error: fetchError } = await supabase
+    .from('procedures')
+    .select('image_urls, file_urls, captions')
+    .eq('id', procedureId)
+    .single();
 
+  if (fetchError) {
+    addInAppLog(`[EXECUTOR] Failed to fetch procedure metadata: ${fetchError.message}`);
+    throw fetchError;
+  }
 
-const { data: fresh, error: fetchError } = await supabase
-  .from('procedures')
-  .select('image_urls, captions')
-  .eq('id', procedureId)
-  .single();
+  const existingImageUrls = (fresh?.image_urls || []).filter(uri => uri.startsWith('http'));
+  const localImageUrls = (imageUrls || []).filter(uri => uri.startsWith('http'));
+  const mergedImageUrls = Array.from(new Set([...existingImageUrls, ...localImageUrls]));
 
-if (fetchError) {
-  addInAppLog(`[EXECUTOR] Failed to fetch procedure metadata: ${fetchError.message}`);
-  throw fetchError;
-}
-const syncedUrls = (fresh?.image_urls || []).filter(uri => uri.startsWith('http'));
-const localUrls = (imageUrls || []).filter(uri => uri.startsWith('http'));
-const mergedUrls = Array.from(new Set([...syncedUrls, ...localUrls]));
+  const existingFileUrls = (fresh?.file_urls || []).filter(uri => uri.startsWith('http'));
+  const localFileUrls = (fileUrls || []).filter(uri => uri.startsWith('http'));
+  const mergedFileUrls = Array.from(new Set([...existingFileUrls, ...localFileUrls]));
 
-const existingCaptions = fresh?.captions || { image: {}, file: {} };
-const mergedCaptions = {
-  image: {
-    ...existingCaptions.image,
-    ...captions.image,
-  },
-  file: {
-    ...existingCaptions.file,
-    ...captions.file,
-  },
-};
+  const existingCaptions = fresh?.captions || { image: {}, file: {} };
+  const mergedCaptions = {
+    image: {
+      ...existingCaptions.image,
+      ...captions.image,
+    },
+    file: {
+      ...existingCaptions.file,
+      ...captions.file,
+    },
+  };
 
-  // 3. Save to Supabase
   const { error: updateError } = await supabase
     .from('procedures')
     .update({
       description,
-      image_urls: mergedUrls,
-      file_urls: fileUrls,
+      image_urls: mergedImageUrls,
+      file_urls: mergedFileUrls,
       file_labels: fileLabels,
       captions: mergedCaptions,
     })
