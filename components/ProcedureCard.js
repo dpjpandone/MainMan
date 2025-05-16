@@ -150,7 +150,7 @@ addInAppLog('[DEBUG] ProcedureCard callback fired: label=' + label + ', payload=
 
     try {
 if (
-  (label === 'uploadProcedureImage' || label === 'uploadProcedureFile') &&
+  label === 'uploadProcedureImage' &&
   payload.procedureId === item.id &&
   typeof refreshMachine === 'function'
 ) {

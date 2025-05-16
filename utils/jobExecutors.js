@@ -60,7 +60,6 @@ uploadProcedureFile: async ({
       fileLabels,
     });
     addInAppLog(`[EXECUTOR] File uploaded successfully: ${localUri}`);
-notifyJobComplete('uploadProcedureFile', { procedureId });
   } catch (err) {
     addInAppLog(`[EXECUTOR] File upload failed: ${err.message}`);
     throw err;

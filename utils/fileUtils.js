@@ -98,25 +98,8 @@ export async function uploadProcedureFile({
       setFileLabels,
     };
 
-    try {
-      addInAppLog(`[UPLOAD WRAPPER] Attempting tryNowOrQueue for: ${fileName}`);
-      await tryNowOrQueue('uploadProcedureFile', payload);
-    } catch (err) {
-      addInAppLog(`[UPLOAD WRAPPER] tryNowOrQueue failed: ${err.message}`);
+    await tryNowOrQueue('uploadProcedureFile', payload);
 
-      // 🧠 Check if already queued before adding
-      const jobs = await loadJobs();
-      const exists = jobs.some(
-        (j) => j.label === 'uploadProcedureFile' && JSON.stringify(j.payload) === JSON.stringify(payload)
-      );
-
-      if (!exists) {
-        addInAppLog(`[UPLOAD WRAPPER] Manually adding uploadProcedureFile to queue`);
-        await addJob('uploadProcedureFile', payload);
-      } else {
-        addInAppLog(`[UPLOAD WRAPPER] Job already in queue, skipping addJob`);
-      }
-    }
   } catch (err) {
     addInAppLog(`[ERROR] File selection or queuing failed: ${err.message}`);
   }
@@ -256,31 +239,6 @@ if (setFileUrls && Array.isArray(fileUrls)) {
 
   setFileUrls(updatedUrlsInMemory);
   addInAppLog(`[MEMORY PATCH] Final fileUrls: ${JSON.stringify(updatedUrlsInMemory)}`);
-}
-
-
-
-// ✅ Memory patch: replace localUri with publicUrl
-if (setFileUrls && Array.isArray(fileUrls)) {
-  const patched = fileUrls.map(uri =>
-    uri === localUri ? publicUrl : uri
-  );
-  setFileUrls(patched);
-  addInAppLog(`[PATCH] Updated in-memory fileUrls: ${JSON.stringify(patched)}`);
-}
-
-if (localUri.startsWith('file://') && FileSystem.uploadAsync) {
-  try {
-    const info = await FileSystem.getInfoAsync(localUri);
-    if (info.exists) {
-      await FileSystem.deleteAsync(localUri, { idempotent: true });
-      addInAppLog(`[CLEANUP] Deleted local file after upload: ${localUri}`);
-    } else {
-      addInAppLog(`[SKIP] File already missing at cleanup: ${localUri}`);
-    }
-  } catch (cleanupError) {
-    addInAppLog(`[CLEANUP FAIL] Could not delete local file: ${cleanupError.message}`);
-  }
 }
 
   } catch (error) {
