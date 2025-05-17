@@ -18,13 +18,30 @@ import { AppContext } from '../contexts/AppContext';
 import { useContext } from 'react';
 import { wrapWithSync } from '../utils/SyncManager';
 
-export default function HomeScreen({ navigation }) {
+
+  export default function HomeScreen({ navigation }) {
   const { setIsSyncing } = useSync();
   const { setLoginData } = useContext(AppContext);
   const [machines, setMachines] = useState([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [newMachineName, setNewMachineName] = useState('');
   const [companyId, setCompanyId] = useState(null);
+const [showScrollHint, setShowScrollHint] = useState(false);
+  const [listHeight, setListHeight] = useState(0);
+const ITEM_HEIGHT = 75; // approx height per card
+const [scrollOffset, setScrollOffset] = useState(0);
+
+  const handleContentSizeChange = (contentWidth, contentHeight) => {
+    setShowScrollHint(contentHeight > listHeight);
+  };
+const getRemainingCount = () => {
+  const total = machines.length;
+  const visibleCount = Math.ceil(listHeight / ITEM_HEIGHT);
+const scrolledPast = Math.round(scrollOffset / ITEM_HEIGHT);
+  const remaining = total - (scrolledPast + visibleCount);
+  return remaining > 0 ? remaining : 0;
+};
+
 
   useEffect(() => {
     const fetchCompanyAndMachines = async () => {
@@ -107,20 +124,33 @@ export default function HomeScreen({ navigation }) {
   };
   
 
-  return (
-    <View style={styles.container}>
-      <Text style={styles.header}>Machines</Text>
-     
-      <TouchableOpacity
-  onPress={() => navigation.navigate('Login')}
-  style={styles.settingsIcon}
+return (
+  <View style={styles.container}>
+    <Text style={styles.header}>Machines</Text>
+
+    <TouchableOpacity
+      onPress={() => navigation.navigate('Login')}
+      style={styles.settingsIcon}
+    >
+      <MaterialCommunityIcons name="cog-outline" size={26} color="#0f0" />
+    </TouchableOpacity>
+    
+    <TouchableOpacity
+  onPress={() => console.log('Shop picker')}
+  style={[styles.settingsIcon, { right: 10, left: undefined }]} // mirror gear
 >
-  <MaterialCommunityIcons name="cog-outline" size={26} color="#0f0" />
+  <MaterialCommunityIcons name="domain" size={26} color="#0f0" />
 </TouchableOpacity>
 
+
+    {/* Scrollable list wrapper */}
+    <View style={{ flex: 1 }}>
       <FlatList
         data={machines}
         keyExtractor={(item) => item.id}
+        showsVerticalScrollIndicator={true}
+        contentContainerStyle={{ paddingBottom: 100 }}
+        style={{ flex: 1 }}
         renderItem={({ item }) => (
           <View style={styles.machineItem}>
             <TouchableOpacity
@@ -130,48 +160,73 @@ export default function HomeScreen({ navigation }) {
               <Text style={styles.procName}>{item.name}</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => deleteMachine(item.id)}>
-              <Text style={[styles.buttonText, { color: '#f00', fontSize: 20 }]}>✕</Text>
+              <Text style={[styles.buttonText, { color: '#f00', fontSize: 20 }]}>
+                ✕
+              </Text>
             </TouchableOpacity>
           </View>
         )}
-        ListEmptyComponent={<Text style={styles.emptyListText}>No machines added</Text>}
+        ListEmptyComponent={
+          <Text style={styles.emptyListText}>No machines added</Text>
+        }
+        onContentSizeChange={handleContentSizeChange}
+        onLayout={(e) => setListHeight(e.nativeEvent.layout.height)}
+         onScroll={(e) => setScrollOffset(e.nativeEvent.contentOffset.y)}
+  scrollEventThrottle={16}
       />
+    </View>
 
+{getRemainingCount() > 0 && (
+<Text
+  style={{
+    color: '#0f0',
+    textAlign: 'center',
+    paddingRight: 4,
+    fontSize: 12,
+    lineHeight: 14,   // ✅ Tight line spacing
+    marginTop: 2,     // ✅ Reduced spacing above
+    marginBottom: -7, // ✅ Pulls it upward slightly if needed
+  }}
+>     Scroll {getRemainingCount()} More ...
+  </Text>
+)}
 
-      <TouchableOpacity style={styles.addBtn} onPress={() => setModalVisible(true)}>
-        <Text style={styles.addBtnText}>+ Add Machine</Text>
-      </TouchableOpacity>
+    {/* Add machine button */}
+    <TouchableOpacity style={styles.addBtn} onPress={() => setModalVisible(true)}>
+      <Text style={styles.addBtnText}>+ Add Machine</Text>
+    </TouchableOpacity>
 
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <Text style={styles.modalTitleOutside}>Enter Machine Name</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Machine name"
-              placeholderTextColor="#888"
-              value={newMachineName}
-              onChangeText={setNewMachineName}
-            />
-            <View style={styles.buttonRow}>
-              <TouchableOpacity style={styles.homeModalButton} onPress={addMachine}>
-                <Text style={styles.homeModalButtonText}>Add</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.homeModalCancelButton}
-                onPress={() => setModalVisible(false)}
-              >
-                <Text style={styles.homeModalCancelText}>Cancel</Text>
-              </TouchableOpacity>
-            </View>
+    {/* Add machine modal */}
+    <Modal
+      animationType="slide"
+      transparent={true}
+      visible={modalVisible}
+      onRequestClose={() => setModalVisible(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContainer}>
+          <Text style={styles.modalTitleOutside}>Enter Machine Name</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Machine name"
+            placeholderTextColor="#888"
+            value={newMachineName}
+            onChangeText={setNewMachineName}
+          />
+          <View style={styles.buttonRow}>
+            <TouchableOpacity style={styles.homeModalButton} onPress={addMachine}>
+              <Text style={styles.homeModalButtonText}>Add</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.homeModalCancelButton}
+              onPress={() => setModalVisible(false)}
+            >
+              <Text style={styles.homeModalCancelText}>Cancel</Text>
+            </TouchableOpacity>
           </View>
         </View>
-      </Modal>
-    </View>
-  );
-}
+      </View>
+    </Modal>
+  </View>
+);
+  }
