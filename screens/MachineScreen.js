@@ -166,32 +166,50 @@ const [shopModalVisible, setShopModalVisible] = useState(false);
     <CombinedSyncBanner />
 
     
-<View style={[styles.container, { paddingTop: 50 }]}>
-    <StatusBar backgroundColor="#000" style="light" />
+<View style={[styles.container]}>
+  <StatusBar backgroundColor="#000" style="light" />
 
-<View style={{ position: 'relative', alignItems: 'center' }}>
-  <Text style={styles.header}>{machine?.name}</Text>
+  <View style={{ alignItems: 'center', paddingTop: 40, marginBottom: 10 }}>
+    <View style={{ maxWidth: '70%' }}>
+      <Text
+        style={[
+          styles.header,
+          {
+            textAlign: 'center',
+            flexWrap: 'wrap',
+          },
+        ]}
+        numberOfLines={2}
+        ellipsizeMode="tail"
+      >
+        {machine?.name || 'Machine'}
+      </Text>
+    </View>
 
-  <TouchableOpacity
-    onPress={() => setShopModalVisible(true)}
-    style={{
-      position: 'absolute',
-      top: 0,
-      right: 10,
-      padding: 6,
-    }}
-  >
-    <MaterialCommunityIcons name="domain" size={26} color="#0f0" />
-  </TouchableOpacity>
-</View>
+    {/* Uncomment if you want the cog like HomeScreen */}
+    {/*
+    <TouchableOpacity
+      onPress={() => navigation.navigate('Login')}
+      style={{ position: 'absolute', left: 10, top: 40, padding: 6 }}
+    >
+      <MaterialCommunityIcons name="cog-outline" size={26} color="#0f0" />
+    </TouchableOpacity>
+    */}
 
+    <TouchableOpacity
+      onPress={() => setShopModalVisible(true)}
+      style={{ position: 'absolute', right: 10, top: 40, padding: 6 }}
+    >
+      <MaterialCommunityIcons name="domain" size={26} color="#0f0" />
+    </TouchableOpacity>
+  </View>
 
-  <FlatList
-    data={procedures.filter(p => !p.is_non_routine)}
-    keyExtractor={(item) => item.id.toString()}
-    renderItem={renderProcedure}
-    extraData={refreshKey}
-  />
+<FlatList
+  contentContainerStyle={{ paddingTop: 10 }}
+  data={procedures.filter((p) => !p.is_non_routine)}
+  keyExtractor={(item) => item.id.toString()}
+  renderItem={renderProcedure}
+/>
 
       <TouchableOpacity style={styles.addBtn} onPress={() => setModalVisible(true)}>
         <Text style={styles.addBtnText}>+ Add Procedure</Text>

@@ -1,16 +1,7 @@
 // components/FilterModal.js
 
 import React, { useEffect, useState } from 'react';
-import {
-  Modal,
-  View,
-  Text,
-  TouchableOpacity,
-  TextInput,
-  ActivityIndicator,
-  ScrollView,
-  Alert,
-} from 'react-native';
+import { Modal, View, Text, TouchableOpacity, TextInput, ActivityIndicator, ScrollView, Alert } from 'react-native';
 import { styles } from '../styles/globalStyles';
 import { supabase } from '../utils/supaBaseConfig';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -22,7 +13,7 @@ export default function FilterModal({ visible, onClose, companyId, currentShop, 
   const [mode, setMode] = useState('select');
   const [customShop, setCustomShop] = useState('');
 
-  const fetchShopList = async () => {
+const fetchShopList = async () => {
     setLoading(true);
     const { data, error } = await supabase
       .from('shops')
@@ -46,10 +37,10 @@ useEffect(() => {
   }
 }, [visible, companyId]);
 
-  const handleSelect = (shop) => {
-    onShopSelected(shop === 'All' ? null : shop);
-    onClose();
-  };
+const handleSelect = (shop) => {
+  onShopSelected(shop); // Always pass a string
+  onClose();
+};
 
   const confirmDelete = (shop) => {
     Alert.alert(
@@ -102,7 +93,16 @@ useEffect(() => {
   return (
     <Modal visible={visible} transparent animationType="slide">
       <View style={styles.modalOverlay}>
-        <View style={styles.modalContainer}>
+<TouchableOpacity
+  style={styles.modalCloseBtn}
+  onPress={() => {
+    onClose();
+  }}
+>
+  <Text style={styles.modalCloseBtnText}>✕</Text>
+</TouchableOpacity>
+
+<View style={styles.modalContainer}>
           <Text style={[styles.modalTitleOutside, { marginBottom: 10 }]}>Filter by Shop</Text>
 
           {loading ? (

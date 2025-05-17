@@ -22,31 +22,16 @@ import { CombinedSyncBanner } from '../contexts/SyncContext';
 
 export default function HomeScreen({ navigation }) {
 const iconOffsetTop = 40; 
-const [refreshKey, setRefreshKey] = useState(0);
   const { setIsSyncing } = useSync();
   const { setLoginData } = useContext(AppContext);
   const [machines, setMachines] = useState([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [newMachineName, setNewMachineName] = useState('');
   const [companyId, setCompanyId] = useState(null);
-const [showScrollHint, setShowScrollHint] = useState(false);
-  const [listHeight, setListHeight] = useState(0);
-const ITEM_HEIGHT = 75; 
-const [scrollOffset, setScrollOffset] = useState(0);
+
 const [filterModalVisible, setFilterModalVisible] = useState(false);
 const [selectedFilterShop, setSelectedFilterShop] = useState('All');
-const safeFilterShop = typeof selectedFilterShop === 'string' && selectedFilterShop !== '' ? selectedFilterShop : 'All';
 
-const handleContentSizeChange = (contentWidth, contentHeight) => {
-    setShowScrollHint(contentHeight > listHeight);
-  };
-const getRemainingCount = () => {
-  const total = machines.length;
-  const visibleCount = Math.ceil(listHeight / ITEM_HEIGHT);
-const scrolledPast = Math.round(scrollOffset / ITEM_HEIGHT);
-  const remaining = total - (scrolledPast + visibleCount);
-  return remaining > 0 ? remaining : 0;
-};
 
 
   useEffect(() => {
@@ -135,104 +120,70 @@ return (
 <View style={styles.container}>
   <CombinedSyncBanner />
 
-  <View
-    style={{
-      position: 'relative',
-      alignItems: 'center',
-      paddingTop: 40,
-      marginBottom: 10,
-    }}
-  >
+<View style={{ alignItems: 'center', paddingTop: 40, marginBottom: 10 }}>
+  <View style={{ maxWidth: '70%' }}>
     <Text
       style={[
         styles.header,
         {
           textAlign: 'center',
-          paddingHorizontal: 60,
           flexWrap: 'wrap',
         },
       ]}
       numberOfLines={2}
+      ellipsizeMode="tail"
     >
-{safeFilterShop !== 'All' ? `(${safeFilterShop})` : 'Machines'}
+      {selectedFilterShop && selectedFilterShop !== 'All'
+        ? selectedFilterShop
+        : 'Machines'}
     </Text>
+  </View>
 
-<TouchableOpacity
-  onPress={() => navigation.navigate('Login')}
-  style={{
-    position: 'absolute',
-    left: 10,
-    top: iconOffsetTop,
-    padding: 6,
-  }}
->
-  <MaterialCommunityIcons name="cog-outline" size={26} color="#0f0" />
-</TouchableOpacity>
+  <TouchableOpacity
+    onPress={() => navigation.navigate('Login')}
+    style={{ position: 'absolute', left: 10, top: 40, padding: 6 }}
+  >
+    <MaterialCommunityIcons name="cog-outline" size={26} color="#0f0" />
+  </TouchableOpacity>
 
-<TouchableOpacity
-  onPress={() => setFilterModalVisible(true)}
-  style={{
-    position: 'absolute',
-    right: 10,
-    top: iconOffsetTop,
-    padding: 6,
-  }}
->
-  <MaterialCommunityIcons name="domain" size={26} color="#0f0" />
-</TouchableOpacity>  </View>
+  <TouchableOpacity
+    onPress={() => setFilterModalVisible(true)}
+    style={{ position: 'absolute', right: 10, top: 40, padding: 6 }}
+  >
+    <MaterialCommunityIcons name="domain" size={26} color="#0f0" />
+  </TouchableOpacity>
+</View>
 
 
     
     <View style={{ flex: 1 }}>
-      <FlatList
-data={
-  safeFilterShop === 'All'
-    ? machines
-    : machines.filter((m) => m.shop === safeFilterShop)
-}
-        keyExtractor={(item) => item.id}
-        showsVerticalScrollIndicator={true}
-        contentContainerStyle={{ paddingBottom: 100 }}
-        style={{ flex: 1 }}
-        renderItem={({ item }) => (
-          <View style={styles.machineItem}>
-            <TouchableOpacity
-              style={{ flex: 1 }}
-              onPress={() => goToMachine(item.id)}
-            >
-              <Text style={styles.procName}>{item.name}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => deleteMachine(item.id)}>
-              <Text style={[styles.buttonText, { color: '#f00', fontSize: 20 }]}>
-                ✕
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
-        ListEmptyComponent={
-          <Text style={styles.emptyListText}>No machines added</Text>
-        }
-        onContentSizeChange={handleContentSizeChange}
-        onLayout={(e) => setListHeight(e.nativeEvent.layout.height)}
-         onScroll={(e) => setScrollOffset(e.nativeEvent.contentOffset.y)}
+<FlatList
+  data={
+    selectedFilterShop === 'All'
+      ? machines
+      : machines.filter((m) => m.shop === selectedFilterShop)
+  }
+  keyExtractor={(item) => item.id}
+  showsVerticalScrollIndicator={true}
+  contentContainerStyle={{ paddingBottom: 100 }}
+  style={{ flex: 1 }}
+  renderItem={({ item, index }) => (
+    <View
+      style={styles.machineItem}
+    >
+      <TouchableOpacity style={{ flex: 1 }} onPress={() => goToMachine(item.id)}>
+        <Text style={styles.procName}>{item.name}</Text>
+      </TouchableOpacity>
+      <TouchableOpacity onPress={() => deleteMachine(item.id)}>
+        <Text style={[styles.buttonText, { color: '#f00', fontSize: 20 }]}>✕</Text>
+      </TouchableOpacity>
+    </View>
+  )}
+  ListEmptyComponent={<Text style={styles.emptyListText}>No machines added</Text>}
   scrollEventThrottle={16}
-      />
+/>
     </View>
 
-{getRemainingCount() > 0 && (
-<Text
-  style={{
-    color: '#0f0',
-    textAlign: 'center',
-    paddingRight: 4,
-    fontSize: 12,
-    lineHeight: 14,   
-    marginTop: 2,     
-    marginBottom: -7, 
-  }}
->     Scroll {getRemainingCount()} More ...
-  </Text>
-)}
 
     <TouchableOpacity style={styles.addBtn} onPress={() => setModalVisible(true)}>
       <Text style={styles.addBtnText}>+ Add Machine</Text>
