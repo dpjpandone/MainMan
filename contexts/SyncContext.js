@@ -262,7 +262,7 @@ export function StaleDataOverlay({ style = {}, centered = false }) {
       style={[
         !centered && {
           position: 'absolute',
-          top: 28,
+          top: 23,
           right: 8,
           zIndex: 10000,
         },
