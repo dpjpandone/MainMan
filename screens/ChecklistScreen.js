@@ -8,6 +8,7 @@ import { createClient } from '@supabase/supabase-js';
 import { supabase } from '../utils/supaBaseConfig';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { wrapWithSync } from '../utils/SyncManager';
+import { subscribeToReconnect } from '../contexts/SyncContext';
 
 // Initialize Supabase client
 
@@ -80,6 +81,11 @@ export default function ChecklistScreen() {
       fetchProcedures();
     }, [])
   );
+
+  useEffect(() => {
+  const unsubscribe = subscribeToReconnect(fetchProcedures);
+  return unsubscribe;
+}, []);
 
   return (
     <ScrollView

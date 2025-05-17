@@ -16,6 +16,7 @@ import { tryNowOrQueue, subscribeToJobComplete } from '../utils/SyncManager';
 import { CaptionPrompt } from '../utils/captionUtils';
 import { addInAppLog } from '../utils/InAppLogger';
 import { StaleDataOverlay } from '../contexts/SyncContext';
+import { subscribeToReconnect } from '../contexts/SyncContext';
 
 function isProcedurePastDue(item) {
   const lastCompleted = item?.last_completed ? new Date(item.last_completed) : null;
@@ -50,6 +51,32 @@ const [captions, setCaptions] = useState(item.captions || { image: {}, file: {} 
 const [captionModalVisible, setCaptionModalVisible] = useState(false);
 const [captionTargetUri, setCaptionTargetUri] = useState(null);
 
+const loadProcedureDetails = async () => {
+  await wrapWithSync('loadProcedureDetails', async () => {
+    const { data, error } = await supabase
+      .from('procedures')
+      .select('description, image_urls, file_urls, file_labels, captions')
+      .eq('id', item.id)
+      .single();
+
+    if (error || !data) {
+      const msg = '[MODAL ERROR] Procedure not found or error: ' + (error?.message || 'unknown error');
+      addInAppLog(msg);
+      throw new Error(msg); // 🔥 required for hourglass to stay visible
+    }
+
+    setDescription(data.description || '');
+    const cleanedUrls = (data.image_urls || []).filter(uri => uri.startsWith('http'));
+    setImageUrls(cleanedUrls);
+    setGalleryKey(prev => prev + 1);
+    setCaptions(data.captions || { image: {}, file: {} });
+    setFileUrls(data.file_urls || []);
+    setFileLabels(data.file_labels || []);
+    addInAppLog('[DEBUG] Captions object received from Supabase: ' + JSON.stringify(data.captions));
+  });
+};
+
+
 const renderLinkedDescription = (text) => {
     const parts = text.split(/(\bhttps?:\/\/\S+\b)/g); // Match http/https URLs
     return parts.map((part, index) => {
@@ -77,7 +104,14 @@ const renderLinkedDescription = (text) => {
     });
   };
   
-    
+useEffect(() => {
+  if (!modalVisible) return;
+
+  const unsubscribe = subscribeToReconnect(loadProcedureDetails);
+  return unsubscribe;
+}, [modalVisible, item.id]);
+
+  
   useEffect(() => {
     const fetchFreshStatus = async () => {
       await wrapWithSync('fetchProcedureStatus', async () => {
@@ -175,28 +209,7 @@ if (
     setModalVisible(true); // Show modal immediately — allows warning display
   
     try {
-await wrapWithSync('loadProcedureDetails', async () => {
-  const { data, error } = await supabase
-    .from('procedures')
-.select('description, image_urls, file_urls, file_labels, captions')
-    .eq('id', item.id)
-    .single();
-
-  if (error || !data) {
-addInAppLog('[MODAL ERROR] Procedure not found or error: ' + (error?.message || 'unknown error'));
-    return;
-  }
-
-  setDescription(data.description || '');
-const cleanedUrls = (data.image_urls || []).filter(uri => uri.startsWith('http'));
-setImageUrls(cleanedUrls);
-setGalleryKey(prev => prev + 1);
-setCaptions(data.captions || { image: {}, file: {} });
-addInAppLog('[DEBUG] Captions object received from Supabase: ' + JSON.stringify(data.captions));
-
-  setFileUrls(data.file_urls || []);
-  setFileLabels(data.file_labels || []);
-});
+await loadProcedureDetails();
   
 setDetailsEditMode(false);
 setAttachmentDeleteMode(false);

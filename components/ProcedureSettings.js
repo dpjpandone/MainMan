@@ -14,70 +14,61 @@ import { styles } from '../styles/globalStyles';
 import { supabase } from '../utils/supaBaseConfig';
 import { wrapWithSync } from '../utils/SyncManager';
 import { tryNowOrQueue } from '../utils/SyncManager';
+import { StaleDataOverlay, subscribeToReconnect } from '../contexts/SyncContext';
 
 export default function ProcedureSettings({ visible, onClose, procedureId }) {
   const [intervalDays, setIntervalDays] = useState('');
   const [selectedDate, setSelectedDate] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [companyId, setCompanyId] = useState(null);
+const [companyId, setCompanyId] = useState(null);
+
+const loadProcedureSettings = async () => {
+  setLoading(true);
+  try {
+    await wrapWithSync('fetchProcedureSettings', async () => {
+      const session = await AsyncStorage.getItem('loginData');
+      const parsed = JSON.parse(session);
+      const resolvedCompanyId = parsed?.companyId;
+
+      if (!resolvedCompanyId) throw new Error('Missing companyId');
+
+      setCompanyId(resolvedCompanyId);
+
+      const { data, error } = await supabase
+        .from('procedures')
+        .select('interval_days, last_completed, machine_id')
+        .eq('id', procedureId)
+        .eq('company_id', resolvedCompanyId)
+        .single();
+
+      if (error || !data) throw error;
+
+      setIntervalDays(data.interval_days?.toString() || '');
+      if (data.last_completed) {
+        const iso = new Date(data.last_completed).toISOString().split('T')[0];
+        setSelectedDate(iso);
+      }
+    });
+  } catch (error) {
+    if (__DEV__) console.warn('Error fetching procedure:', error);
+  } finally {
+    setLoading(false);
+  }
+};
 
   useEffect(() => {
   if (!visible || !procedureId) return;
 
-  const fetchProcedure = async () => {
-    setLoading(true);
-    try {
-      await wrapWithSync('fetchProcedureSettings', async () => {
-        const session = await AsyncStorage.getItem('loginData');
-        const parsed = JSON.parse(session);
-        const resolvedCompanyId = parsed?.companyId;
-
-        if (!resolvedCompanyId) {
-          console.warn('❌ No companyId in session');
-          throw new Error('Missing companyId');
-        }
-
-        setCompanyId(resolvedCompanyId);
-
-        const { data, error } = await supabase
-          .from('procedures')
-          .select('interval_days, last_completed, machine_id')
-          .eq('id', procedureId)
-          .eq('company_id', resolvedCompanyId)
-          .single();
-
-        console.log('[FETCH] procedureId:', procedureId);
-        console.log('[FETCH] Supabase response:', data);
-
-        if (error) {
-          console.warn('❌ Supabase error:', error);
-          throw error;
-        }
-
-        if (!data) {
-          console.warn('⚠️ Procedure not found');
-          throw new Error('Procedure not found');
-        }
-
-        setIntervalDays(data.interval_days?.toString() || '');
-        if (data.last_completed) {
-          const iso = new Date(data.last_completed).toISOString().split('T')[0];
-          setSelectedDate(iso);
-        }
-      });
-    } catch (error) {
-      if (__DEV__) console.warn('Error fetching procedure:', error);
-} finally {
-  setLoading(false);
-  console.log('[STATUS] Loading complete. Final state:');
-  console.log('intervalDays:', intervalDays);
-  console.log('selectedDate:', selectedDate);
-  console.log('companyId:', companyId);
-}
-  };
-
-  fetchProcedure();
+  loadProcedureSettings();
 }, [visible, procedureId]);
+
+useEffect(() => {
+  if (!visible || !procedureId) return;
+
+  const unsubscribe = subscribeToReconnect(loadProcedureSettings);
+  return unsubscribe;
+}, [visible, procedureId]);
+
 
 const handleSave = async () => {
   if (!intervalDays || isNaN(intervalDays)) {
@@ -120,10 +111,11 @@ return (
       <View style={{ flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' }}>
         <View style={styles.modalContainer}>
 
-          {/* Header with shop icon */}
+        
           <View style={{ marginTop: 10, marginBottom: 20, flexDirection: 'row', justifyContent: 'center' }}>
             <Text style={{ color: '#0f0', fontSize: 22, fontWeight: 'bold' }}>Procedure Settings</Text>
           </View>
+        {!loading && <StaleDataOverlay />}
 
           {loading ? (
             <ActivityIndicator color="#0f0" style={{ marginTop: 20 }} />

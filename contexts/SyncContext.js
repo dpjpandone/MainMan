@@ -13,10 +13,16 @@ export let setGlobalSyncFailed = () => {};
 export let acknowledgeSyncFailure = () => {};
 export let setGlobalQueuedJobCount = () => {};
 export let setGlobalFailedJobs = () => {};
+export let setGlobalStaleData = () => {};
 
 const SyncContext = createContext();
+// Fetch retry subscription system
+const reconnectListeners = new Set();
 
-export let setGlobalStaleData = () => {};
+export function subscribeToReconnect(callback) {
+  reconnectListeners.add(callback);
+  return () => reconnectListeners.delete(callback);
+}
 
 export const SyncProvider = ({ children }) => {
   const [isSyncing, setIsSyncing] = useState(false);
@@ -49,10 +55,19 @@ setGlobalStaleData = setHasStaleData;
 
     const netInfoUnsubscribe = NetInfo.addEventListener(state => {
       addInAppLog(`[TRIGGER] NetInfo: isConnected = ${state.isConnected}`);
-      if (state.isConnected) {
-        addInAppLog('[TRIGGER] Network reconnected — running sync queue');
-        runSyncQueue();
-      }
+if (state.isConnected) {
+  addInAppLog('[TRIGGER] Network reconnected — running sync queue');
+  runSyncQueue();
+
+  addInAppLog('[TRIGGER] Notifying reconnect listeners');
+  reconnectListeners.forEach(cb => {
+    try {
+      cb();
+    } catch (err) {
+      addInAppLog(`[TRIGGER] Reconnect listener failed: ${err.message}`);
+    }
+  });
+}
     });
 
     return () => {
@@ -183,7 +198,8 @@ function shouldRetry(job) {
   return timeSinceLast >= delay;
 }
 
-export function StaleDataOverlay() {
+export function StaleDataOverlay({ style = {}, centered = false }) {
+  
   const { isSyncing, hasStaleData, syncAcknowledged } = useSync();
   const [visible, setVisible] = useState(false);
   const startTimeRef = useRef(null);
@@ -238,19 +254,22 @@ export function StaleDataOverlay() {
     return () => addInAppLog(`[HOURGLASS] 🧼 Unmounted`);
   }, []);
 
-  // 🧼 no logging inside render!
+
   if (!visible) return null;
 
-  return (
+ return (
     <View
-      style={{
-        position: 'absolute',
-        top: 28,
-        right: 8,
-        zIndex: 10000,
-      }}
+      style={[
+        !centered && {
+          position: 'absolute',
+          top: 28,
+          right: 8,
+          zIndex: 10000,
+        },
+        style,
+      ]}
     >
-      <PendingHourglass />
+      <PendingHourglass centered={centered} />
     </View>
   );
 }

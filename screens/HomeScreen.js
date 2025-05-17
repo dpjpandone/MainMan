@@ -19,8 +19,7 @@ import { useContext } from 'react';
 import { wrapWithSync } from '../utils/SyncManager';
 import FilterModal from '../components/FilterModal';
 import { CombinedSyncBanner } from '../contexts/SyncContext';
-import { setGlobalStaleData } from '../contexts/SyncContext'; // 🧨 THIS LINE IS MISSING
-
+import { subscribeToReconnect } from '../contexts/SyncContext';
 
 export default function HomeScreen({ navigation }) {
 const iconOffsetTop = 40; 
@@ -58,8 +57,12 @@ useEffect(() => {
     });
   };
 
-  const unsubscribe = navigation.addListener('focus', fetchCompanyAndMachines);
-  return unsubscribe;
+const unsubscribeFocus = navigation.addListener('focus', fetchCompanyAndMachines);
+const unsubscribeReconnect = subscribeToReconnect(fetchCompanyAndMachines);
+return () => {
+  unsubscribeFocus();
+  unsubscribeReconnect();
+};
 }, [navigation]);
               
 

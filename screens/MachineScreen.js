@@ -15,6 +15,7 @@ import { tryNowOrQueue, subscribeToJobComplete } from '../utils/SyncManager';
 import { addInAppLog } from '../utils/InAppLogger';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import ShopModal from '../components/ShopModal';
+import { subscribeToReconnect } from '../contexts/SyncContext';
 
 export default function MachineScreen() {
   const route = useRoute();
@@ -62,6 +63,11 @@ const [shopModalVisible, setShopModalVisible] = useState(false);
     return unsubscribe;
   }, []);
   
+  useEffect(() => {
+  const unsubscribe = subscribeToReconnect(loadMachineAndProcedures);
+  return unsubscribe;
+}, [loadMachineAndProcedures]);
+
 
   const [machine, setMachine] = useState(null);
   const [procedures, setProcedures] = useState([]);
@@ -186,24 +192,14 @@ const [shopModalVisible, setShopModalVisible] = useState(false);
       </Text>
     </View>
 
-    {/* Uncomment if you want the cog like HomeScreen */}
-    {/*
-    <TouchableOpacity
-      onPress={() => navigation.navigate('Login')}
-      style={{ position: 'absolute', left: 10, top: 40, padding: 6 }}
-    >
-      <MaterialCommunityIcons name="cog-outline" size={26} color="#0f0" />
-    </TouchableOpacity>
-    */}
 
-    <TouchableOpacity
-      onPress={() => setShopModalVisible(true)}
-      style={{ position: 'absolute', right: 10, top: 40, padding: 6 }}
-    >
-      <MaterialCommunityIcons name="domain" size={26} color="#0f0" />
-    </TouchableOpacity>
-  </View>
-
+<TouchableOpacity
+          onPress={() => setShopModalVisible(true)}
+          style={{ position: 'absolute', right: 10, top: 40, padding: 2 }}
+        >
+          <MaterialCommunityIcons name="cog-outline" size={26} color="#0f0" />
+        </TouchableOpacity>
+      </View>
 <FlatList
   contentContainerStyle={{ paddingTop: 10 }}
   data={procedures.filter((p) => !p.is_non_routine)}

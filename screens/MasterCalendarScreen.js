@@ -15,6 +15,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { styles } from '../styles/globalStyles';
 import { supabase } from '../utils/supaBaseConfig';
 import { wrapWithSync } from '../utils/SyncManager';
+import { StaleDataOverlay, subscribeToReconnect } from '../contexts/SyncContext';
 
 export default function MasterCalendarScreen() {
   const [selectedDate, setSelectedDate] = useState(null);
@@ -169,6 +170,13 @@ export default function MasterCalendarScreen() {
     });
     return unsubscribe;
   }, [navigation, companyId]);
+
+  useEffect(() => {
+  if (!companyId) return;
+  const unsubscribe = subscribeToReconnect(() => loadNonRoutineProcedures(companyId));
+  return unsubscribe;
+}, [companyId]);
+
 
   return (
 <View style={styles.container}>

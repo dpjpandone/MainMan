@@ -468,14 +468,15 @@ modalTopOverlay: {
 
 });
 
-export const PendingHourglass = () => {
+export const PendingHourglass = ({ style: externalStyle = {}, centered = false }) => {
+  
   const [sandFrame, setSandFrame] = useState(0);
 
   const sandIcons = ['timer-sand', 'timer-sand', 'timer-sand'];
 
   const getTransform = () => {
-    if (sandFrame === 1) return [{ scaleY: -1 }];      // Flip vertically
-    if (sandFrame === 2) return [{ rotate: '90deg' }]; // Rotate horizontally
+    if (sandFrame === 1) return [{ scaleY: -1 }];
+    if (sandFrame === 2) return [{ rotate: '90deg' }];
     return [];
   };
 
@@ -493,13 +494,22 @@ export const PendingHourglass = () => {
     return () => clearTimeout(timeoutId);
   }, []);
 
+const defaultStyle = centered
+    ? {}
+    : {
+        position: 'absolute',
+        top: 1,
+        right: 4,
+        zIndex: 3,
+      };
+
+  const finalStyle = {
+    ...defaultStyle,
+    ...externalStyle,
+  };
+
   return (
-    <View style={{
-      position: 'absolute',
-      top: 1,
-      right: 4,
-      zIndex: 3,
-    }}>
+    <View style={finalStyle}>
       <MaterialCommunityIcons
         name={sandIcons[sandFrame]}
         size={20}
@@ -509,5 +519,4 @@ export const PendingHourglass = () => {
     </View>
   );
 };
-
 
