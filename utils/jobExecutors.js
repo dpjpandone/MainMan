@@ -5,7 +5,20 @@ import { addInAppLog } from '../utils/InAppLogger';
 import { notifyJobComplete } from './SyncManager';
 
 export const jobExecutors = {
-uploadProcedureImage: async ({
+
+updateMachineShop: async ({ machineId, shop }) => {
+  const { error } = await supabase
+    .from('machines')
+    .update({ shop })
+    .eq('id', machineId);
+
+  if (error) {
+    console.warn('❌ Failed to update machine shop:', error);
+    throw error;
+  }
+},
+
+  uploadProcedureImage: async ({
   procedureId,
   localUri,
   fileName,

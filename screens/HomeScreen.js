@@ -17,9 +17,12 @@ import { useSync } from '../contexts/SyncContext';
 import { AppContext } from '../contexts/AppContext';
 import { useContext } from 'react';
 import { wrapWithSync } from '../utils/SyncManager';
+import FilterModal from '../components/FilterModal';
+import { CombinedSyncBanner } from '../contexts/SyncContext';
 
-
-  export default function HomeScreen({ navigation }) {
+export default function HomeScreen({ navigation }) {
+const iconOffsetTop = 40; 
+const [refreshKey, setRefreshKey] = useState(0);
   const { setIsSyncing } = useSync();
   const { setLoginData } = useContext(AppContext);
   const [machines, setMachines] = useState([]);
@@ -28,10 +31,13 @@ import { wrapWithSync } from '../utils/SyncManager';
   const [companyId, setCompanyId] = useState(null);
 const [showScrollHint, setShowScrollHint] = useState(false);
   const [listHeight, setListHeight] = useState(0);
-const ITEM_HEIGHT = 75; // approx height per card
+const ITEM_HEIGHT = 75; 
 const [scrollOffset, setScrollOffset] = useState(0);
+const [filterModalVisible, setFilterModalVisible] = useState(false);
+const [selectedFilterShop, setSelectedFilterShop] = useState('All');
+const safeFilterShop = typeof selectedFilterShop === 'string' && selectedFilterShop !== '' ? selectedFilterShop : 'All';
 
-  const handleContentSizeChange = (contentWidth, contentHeight) => {
+const handleContentSizeChange = (contentWidth, contentHeight) => {
     setShowScrollHint(contentHeight > listHeight);
   };
 const getRemainingCount = () => {
@@ -125,28 +131,65 @@ const scrolledPast = Math.round(scrollOffset / ITEM_HEIGHT);
   
 
 return (
-  <View style={styles.container}>
-    <Text style={styles.header}>Machines</Text>
+  
+<View style={styles.container}>
+  <CombinedSyncBanner />
 
-    <TouchableOpacity
-      onPress={() => navigation.navigate('Login')}
-      style={styles.settingsIcon}
+  <View
+    style={{
+      position: 'relative',
+      alignItems: 'center',
+      paddingTop: 40,
+      marginBottom: 10,
+    }}
+  >
+    <Text
+      style={[
+        styles.header,
+        {
+          textAlign: 'center',
+          paddingHorizontal: 60,
+          flexWrap: 'wrap',
+        },
+      ]}
+      numberOfLines={2}
     >
-      <MaterialCommunityIcons name="cog-outline" size={26} color="#0f0" />
-    </TouchableOpacity>
-    
-    <TouchableOpacity
-  onPress={() => console.log('Shop picker')}
-  style={[styles.settingsIcon, { right: 10, left: undefined }]} // mirror gear
+{safeFilterShop !== 'All' ? `(${safeFilterShop})` : 'Machines'}
+    </Text>
+
+<TouchableOpacity
+  onPress={() => navigation.navigate('Login')}
+  style={{
+    position: 'absolute',
+    left: 10,
+    top: iconOffsetTop,
+    padding: 6,
+  }}
 >
-  <MaterialCommunityIcons name="domain" size={26} color="#0f0" />
+  <MaterialCommunityIcons name="cog-outline" size={26} color="#0f0" />
 </TouchableOpacity>
 
+<TouchableOpacity
+  onPress={() => setFilterModalVisible(true)}
+  style={{
+    position: 'absolute',
+    right: 10,
+    top: iconOffsetTop,
+    padding: 6,
+  }}
+>
+  <MaterialCommunityIcons name="domain" size={26} color="#0f0" />
+</TouchableOpacity>  </View>
 
-    {/* Scrollable list wrapper */}
+
+    
     <View style={{ flex: 1 }}>
       <FlatList
-        data={machines}
+data={
+  safeFilterShop === 'All'
+    ? machines
+    : machines.filter((m) => m.shop === safeFilterShop)
+}
         keyExtractor={(item) => item.id}
         showsVerticalScrollIndicator={true}
         contentContainerStyle={{ paddingBottom: 100 }}
@@ -183,20 +226,18 @@ return (
     textAlign: 'center',
     paddingRight: 4,
     fontSize: 12,
-    lineHeight: 14,   // ✅ Tight line spacing
-    marginTop: 2,     // ✅ Reduced spacing above
-    marginBottom: -7, // ✅ Pulls it upward slightly if needed
+    lineHeight: 14,   
+    marginTop: 2,     
+    marginBottom: -7, 
   }}
 >     Scroll {getRemainingCount()} More ...
   </Text>
 )}
 
-    {/* Add machine button */}
     <TouchableOpacity style={styles.addBtn} onPress={() => setModalVisible(true)}>
       <Text style={styles.addBtnText}>+ Add Machine</Text>
     </TouchableOpacity>
 
-    {/* Add machine modal */}
     <Modal
       animationType="slide"
       transparent={true}
@@ -227,6 +268,17 @@ return (
         </View>
       </View>
     </Modal>
+<FilterModal
+  visible={filterModalVisible}
+  onClose={() => setFilterModalVisible(false)}
+  companyId={companyId}
+  currentShop={selectedFilterShop}
+  onShopSelected={(shopName) => {
+    setSelectedFilterShop(shopName);
+    setFilterModalVisible(false);
+  }}
+/>
+
   </View>
 );
   }

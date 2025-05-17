@@ -13,14 +13,15 @@ import { CombinedSyncBanner } from '../contexts/SyncContext';
 import { StatusBar, Platform,  } from 'react-native';
 import { tryNowOrQueue, subscribeToJobComplete } from '../utils/SyncManager';
 import { addInAppLog } from '../utils/InAppLogger';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import ShopModal from '../components/ShopModal';
 
 export default function MachineScreen() {
   const route = useRoute();
   const { machineId } = route.params;
 
-  const [refreshKey, setRefreshKey] = useState(0);
-const [lastJobLabel, setLastJobLabel] = useState(null);
-
+  const [lastJobLabel, setLastJobLabel] = useState(null);
+const [shopModalVisible, setShopModalVisible] = useState(false);
   
   const loadMachineAndProcedures = useCallback(async () => {
     await wrapWithSync('loadMachineAndProcedures', async () => {
@@ -165,10 +166,24 @@ const [lastJobLabel, setLastJobLabel] = useState(null);
     <CombinedSyncBanner />
 
     
-    <View style={styles.container}>
+<View style={[styles.container, { paddingTop: 50 }]}>
     <StatusBar backgroundColor="#000" style="light" />
 
+<View style={{ position: 'relative', alignItems: 'center' }}>
   <Text style={styles.header}>{machine?.name}</Text>
+
+  <TouchableOpacity
+    onPress={() => setShopModalVisible(true)}
+    style={{
+      position: 'absolute',
+      top: 0,
+      right: 10,
+      padding: 6,
+    }}
+  >
+    <MaterialCommunityIcons name="domain" size={26} color="#0f0" />
+  </TouchableOpacity>
+</View>
 
 
   <FlatList
@@ -264,7 +279,18 @@ const [lastJobLabel, setLastJobLabel] = useState(null);
           </View>
         </View>
       </Modal>
+      <ShopModal
+        visible={shopModalVisible}
+        onClose={() => setShopModalVisible(false)}
+onShopSelected={async (shopName) => {
+  await tryNowOrQueue('updateMachineShop', { machineId, shop: shopName });
+  loadMachineAndProcedures(); // <- Refresh machine.shop display
+}}
+        companyId={machine?.company_id}
+        currentShop={machine?.shop}
+      />
     </View>
+    
   </View>
 );
 }
