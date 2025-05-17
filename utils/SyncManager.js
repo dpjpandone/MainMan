@@ -1,6 +1,6 @@
 // utils/SyncManager.js
 import { Alert } from 'react-native';
-import { setGlobalSyncing, setGlobalSyncFailed, setGlobalQueuedJobCount } from '../contexts/SyncContext';
+import { setGlobalSyncing, setGlobalSyncFailed, setGlobalQueuedJobCount, setGlobalStaleData, acknowledgeSyncFailure } from '../contexts/SyncContext';
 import { addJob, loadJobs, removeJob, markJobAsFailed, incrementRetry } from './JobQueue';
 import { jobExecutors } from './jobExecutors';
 import { addInAppLog } from '../utils/InAppLogger';
@@ -26,16 +26,43 @@ export function endSync(label = 'anonymous') {
   }
 }
 
-// Wrap an async function to auto-handle sync state and duration logging
-export async function wrapWithSync(label, fn) {
+export async function wrapWithSync(label, fn, options = {}) {
+  const { critical = false } = options;
+
   try {
     startSync(label);
     await new Promise((res) => setTimeout(res, 0));
-    return await fn();
+
+    const result = await fn();
+
+    // ✅ Sync succeeded — clear stale + failure state
+    addInAppLog(`[SYNC] ${label} succeeded — clearing sync failure flag`);
+    setGlobalSyncFailed(false);
+    setGlobalStaleData(false);
+
+    setTimeout(() => {
+      console.log(`[STATE CHECK] isSyncing should be false`);
+      console.log(`[STATE CHECK] syncFailed should be false`);
+    }, 500);
+
+    return result;
+
   } catch (err) {
-    addInAppLog(`[SYNC] ${label} failed, triggering UI warning.`);
+    addInAppLog(`[WRAP] ${label} failed — entering catch`);
+
     setGlobalSyncFailed(true);
-    return null; // 👈 prevent unhandled rejection
+    setGlobalStaleData(true);
+    acknowledgeSyncFailure(false); // ✅ Correct global setter
+    addInAppLog(`[WRAP] Marked as stale + unacknowledged`);
+
+    console.log(`[WRAP CATCH] ${label} failed — stale flag set`);
+    addInAppLog(`[STALE] ${label} failed — marking data as stale`);
+
+    if (critical) {
+      addInAppLog(`[CRITICAL] This sync failure was marked critical.`);
+    }
+
+    return null;
   } finally {
     endSync(label);
   }

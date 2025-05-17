@@ -15,6 +15,7 @@ import { handleImageSelection } from '../utils/imageUtils';
 import { tryNowOrQueue, subscribeToJobComplete } from '../utils/SyncManager';
 import { CaptionPrompt } from '../utils/captionUtils';
 import { addInAppLog } from '../utils/InAppLogger';
+import { StaleDataOverlay } from '../contexts/SyncContext';
 
 function isProcedurePastDue(item) {
   const lastCompleted = item?.last_completed ? new Date(item.last_completed) : null;
@@ -430,6 +431,8 @@ addInAppLog('[CAPTION DEBUG] captionTargetUri: ' + captionTargetUri);
 <Modal visible={modalVisible} transparent={false} animationType="fade">
   <View style={styles.modalOverlay}>
     <StatusBar backgroundColor="#000" barStyle="light-content" />
+ 
+ {!detailsEditMode && <StaleDataOverlay/>} 
 
 {detailsEditMode && !keyboardVisible && (
   <>

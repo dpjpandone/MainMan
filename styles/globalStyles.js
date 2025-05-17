@@ -62,14 +62,15 @@ export const styles = StyleSheet.create({
     color: '#000',
     fontWeight: 'bold',
   },
-  modalOverlay: {
-    flex: 1,
-    width: '100%',         // 🔥 Full width
-    height: '100%',        // 🔥 Full height
-    backgroundColor: '#000',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+modalOverlay: {
+  flex: 1,
+  width: '100%',
+  height: '100%',
+  backgroundColor: '#000',
+  justifyContent: 'center',
+  alignItems: 'center',
+  position: 'relative', // ✅ THIS is the fix
+},
   
     modalTitle: {
     color: '#0f0',

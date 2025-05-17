@@ -13,8 +13,11 @@ import { StatusBar } from 'expo-status-bar';
 
 import LoginScreen from './screens/LoginScreen';
 import { AppContext } from './contexts/AppContext';
-import { SyncProvider, CombinedSyncBanner, FailedSyncBanner, SyncFailureModal } from './contexts/SyncContext';
+import { SyncProvider, CombinedSyncBanner, FailedSyncBanner } from './contexts/SyncContext';
 import { registerLogListener, unregisterLogListener, clearInAppLogs, pushLogsToSupabase, LOGGING_ENABLED } from './utils/InAppLogger';
+import { setGlobalStaleData } from './contexts/SyncContext';
+import { StaleDataOverlay } from './contexts/SyncContext';
+
 
 // Screens
 import HomeScreen from './screens/HomeScreen';
@@ -27,11 +30,14 @@ function InAppLogger() {
   const [logs, setLogs] = useState([]);
   const [visible, setVisible] = useState(true);
 
-  useEffect(() => {
-    if (!LOGGING_ENABLED) return;
-    registerLogListener(setLogs);
-    return () => unregisterLogListener();
-  }, []);
+useEffect(() => {
+  if (!LOGGING_ENABLED) return;
+
+  registerLogListener(setLogs);
+
+
+  return () => unregisterLogListener();
+}, []);
 
   if (!visible) {
     return (
@@ -143,6 +149,7 @@ function TabNavigator() {
 export default function App() {
   const [loginData, setLoginData] = useState(null);
 
+
   return (
     <AppContext.Provider value={{ loginData, setLoginData }}>
       <SyncProvider>
@@ -160,8 +167,8 @@ export default function App() {
 
             <StatusBar style="light" backgroundColor="#000" />
             <CombinedSyncBanner />
+            <StaleDataOverlay />
             <FailedSyncBanner />
-            <SyncFailureModal />
             {LOGGING_ENABLED && <InAppLogger />}
           </GestureHandlerRootView>
         </SafeAreaProvider>

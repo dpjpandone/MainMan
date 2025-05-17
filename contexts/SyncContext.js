@@ -5,6 +5,7 @@ import { jobExecutors } from '../utils/jobExecutors';
 import NetInfo from '@react-native-community/netinfo';
 import { addInAppLog } from '../utils/InAppLogger';
 import { notifyJobComplete } from '../utils/SyncManager';
+import { PendingHourglass } from '../styles/globalStyles';
 
 // Global setters (used outside component scope)
 export let setGlobalSyncing = () => {};
@@ -15,23 +16,28 @@ export let setGlobalFailedJobs = () => {};
 
 const SyncContext = createContext();
 
+export let setGlobalStaleData = () => {};
 
 export const SyncProvider = ({ children }) => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncFailed, setSyncFailed] = useState(false);
-  const [syncAcknowledged, setSyncAcknowledged] = useState(true);
   const [queuedJobCount, setQueuedJobCount] = useState(0);
   const [failedJobs, setFailedJobs] = useState([]);
+  const [hasStaleData, setHasStaleData] = useState(false); // ✅ for hourglass
+  const [syncAcknowledged, setSyncAcknowledged] = useState(true); // ✅ for hourglass hiding
 
-  setGlobalFailedJobs = setFailedJobs;
-  setGlobalSyncing = setIsSyncing;
-  setGlobalSyncFailed = (fail = true) => {
-    setSyncFailed(fail);
-    setSyncAcknowledged(!fail);
-  };
-  acknowledgeSyncFailure = () => setSyncAcknowledged(true);
-  setGlobalQueuedJobCount = setQueuedJobCount;
+  // 🔧 Global setter bindings
+setGlobalFailedJobs = setFailedJobs;
+setGlobalSyncing = setIsSyncing;
+setGlobalSyncFailed = (fail = true) => setSyncFailed(fail);
+acknowledgeSyncFailure = (ack = true) => {
+  addInAppLog(`[SYNCCTX] Setting acknowledged = ${ack}`);
+  setSyncAcknowledged(ack);
+};
+setGlobalQueuedJobCount = setQueuedJobCount;
+setGlobalStaleData = setHasStaleData;
 
+  // 📡 Trigger queue runner when app resumes or reconnects
   useEffect(() => {
     const appStateListener = AppState.addEventListener('change', (state) => {
       addInAppLog(`[TRIGGER] AppState changed to ${state}`);
@@ -40,7 +46,7 @@ export const SyncProvider = ({ children }) => {
         runSyncQueue();
       }
     });
-  
+
     const netInfoUnsubscribe = NetInfo.addEventListener(state => {
       addInAppLog(`[TRIGGER] NetInfo: isConnected = ${state.isConnected}`);
       if (state.isConnected) {
@@ -48,29 +54,30 @@ export const SyncProvider = ({ children }) => {
         runSyncQueue();
       }
     });
-  
+
     return () => {
       appStateListener.remove();
       netInfoUnsubscribe();
     };
   }, []);
-  
+
   return (
     <SyncContext.Provider
-    value={{
-      isSyncing,
-      setIsSyncing,
-      syncFailed,
-      syncAcknowledged,
-      queuedJobCount,
-      setQueuedJobCount,
-      failedJobs,
-    }}
-        >
+      value={{
+        isSyncing,
+        setIsSyncing,
+        syncFailed,
+        queuedJobCount,
+        setQueuedJobCount,
+        failedJobs,
+        hasStaleData,
+        syncAcknowledged, 
+      }}
+    >
       {children}
     </SyncContext.Provider>
   );
- };
+};
 
 export const useSync = () => useContext(SyncContext);
 
@@ -113,30 +120,6 @@ export function FailedSyncBanner() {
               <Text style={[styles.modalButtonText, { color: '#fff' }]}>Dismiss</Text>
             </TouchableOpacity>
           </View>
-        </View>
-      </View>
-    </Modal>
-  );
-}
-// ---------------------------
-// SYNC FAILURE MODAL
-// ---------------------------
-export function SyncFailureModal() {
-  const { syncFailed, syncAcknowledged } = useSync();
-
-  if (!syncFailed || syncAcknowledged) return null;
-
-  return (
-    <Modal visible transparent animationType="fade">
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContainer}>
-          <Text style={styles.modalTitle}>Sync Failed</Text>
-          <Text style={styles.modalText}>
-            Unable to complete sync operation. Check connection and try again.
-          </Text>
-          <TouchableOpacity style={styles.modalButton} onPress={acknowledgeSyncFailure}>
-            <Text style={styles.modalButtonText}>Dismiss</Text>
-          </TouchableOpacity>
         </View>
       </View>
     </Modal>
@@ -200,9 +183,80 @@ function shouldRetry(job) {
   return timeSinceLast >= delay;
 }
 
-///COMBINED SYNC BANNER///
+export function StaleDataOverlay() {
+  const { isSyncing, hasStaleData, syncAcknowledged } = useSync();
+  const [visible, setVisible] = useState(false);
+  const startTimeRef = useRef(null);
+  const timeoutRef = useRef(null);
+
+  const staleRef = useRef(hasStaleData);
+  const ackRef = useRef(syncAcknowledged);
+  const hasLoggedVisibility = useRef(null);
+
+  useEffect(() => {
+    staleRef.current = hasStaleData;
+    ackRef.current = syncAcknowledged;
+    addInAppLog(`[HOURGLASS] ⏱️ updated refs → stale=${hasStaleData}, acknowledged=${syncAcknowledged}`);
+  }, [hasStaleData, syncAcknowledged]);
+
+  useEffect(() => {
+    if (isSyncing) {
+      startTimeRef.current = Date.now();
+      setVisible(true);
+      hasLoggedVisibility.current = true;
+      addInAppLog(`[HOURGLASS] 🔄 isSyncing = true → hourglass ON`);
+
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    } else {
+      const elapsed = Date.now() - (startTimeRef.current || 0);
+      const remaining = 1250 - elapsed;
+      addInAppLog(`[HOURGLASS] ✅ isSyncing = false → elapsed=${elapsed}, remaining delay=${remaining}`);
+
+      const evaluate = () => {
+        const stillStale = staleRef.current && !ackRef.current;
+        addInAppLog(`[HOURGLASS] 🔍 Delay complete — evaluating: stale=${staleRef.current}, acknowledged=${ackRef.current}, stayVisible=${stillStale}`);
+        setVisible(stillStale);
+        hasLoggedVisibility.current = stillStale;
+      };
+
+      if (remaining > 0) {
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        timeoutRef.current = setTimeout(evaluate, remaining);
+      } else {
+        evaluate();
+      }
+    }
+
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      addInAppLog(`[HOURGLASS] 🧹 Cleanup timeout`);
+    };
+  }, [isSyncing]);
+
+  useEffect(() => {
+    addInAppLog(`[HOURGLASS] 🧠 Mounted`);
+    return () => addInAppLog(`[HOURGLASS] 🧼 Unmounted`);
+  }, []);
+
+  // 🧼 no logging inside render!
+  if (!visible) return null;
+
+  return (
+    <View
+      style={{
+        position: 'absolute',
+        top: 28,
+        right: 8,
+        zIndex: 10000,
+      }}
+    >
+      <PendingHourglass />
+    </View>
+  );
+}
+
 export function CombinedSyncBanner() {
-  const { isSyncing, queuedJobCount } = useSync();
+  const { queuedJobCount } = useSync();
   const [dots, setDots] = useState('');
   const dotCount = useRef(0);
 
@@ -214,18 +268,10 @@ export function CombinedSyncBanner() {
     return () => clearInterval(interval);
   }, []);
 
-  const shouldRender = isSyncing || queuedJobCount > 0;
+  const shouldRender = queuedJobCount > 0;
   if (!shouldRender) return null;
 
-  let bannerText = '';
-  if (isSyncing && queuedJobCount > 0) {
-    bannerText = `SYNC IN PROGRESS (${queuedJobCount} job${queuedJobCount > 1 ? 's' : ''})${dots}`;
-  } else if (isSyncing) {
-    bannerText = `SYNC IN PROGRESS${dots}`;
-  } else {
-    bannerText = `QUEUE ACTIVE (${queuedJobCount} job${queuedJobCount > 1 ? 's' : ''})${dots}`;
-  }
-
+  const bannerText = `QUEUE ACTIVE (${queuedJobCount} job${queuedJobCount > 1 ? 's' : ''})${dots}`;
   const topPadding = Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 0;
 
   return (

@@ -19,6 +19,8 @@ import { useContext } from 'react';
 import { wrapWithSync } from '../utils/SyncManager';
 import FilterModal from '../components/FilterModal';
 import { CombinedSyncBanner } from '../contexts/SyncContext';
+import { setGlobalStaleData } from '../contexts/SyncContext'; // 🧨 THIS LINE IS MISSING
+
 
 export default function HomeScreen({ navigation }) {
 const iconOffsetTop = 40; 
@@ -34,31 +36,31 @@ const [selectedFilterShop, setSelectedFilterShop] = useState('All');
 
 
 
-  useEffect(() => {
-    const fetchCompanyAndMachines = async () => {
-      await wrapWithSync('fetchMachines', async () => {
-        const session = await AsyncStorage.getItem('loginData');
-        const parsedSession = JSON.parse(session);
-        const company_id = parsedSession?.companyId;
-  
-        if (!company_id) throw new Error('Missing companyId');
-  
-        setCompanyId(company_id);
-  
-        const { data, error } = await supabase
-          .from('machines')
-          .select('*')
-          .eq('company_id', company_id);
-  
-        if (error) throw error;
-  
-        setMachines(data);
-      });
-    };
-  
-    const unsubscribe = navigation.addListener('focus', fetchCompanyAndMachines);
-    return unsubscribe;
-  }, [navigation]);
+useEffect(() => {
+  const fetchCompanyAndMachines = async () => {
+    await wrapWithSync('fetchMachines', async () => {
+      const session = await AsyncStorage.getItem('loginData');
+      const parsedSession = JSON.parse(session);
+      const company_id = parsedSession?.companyId;
+
+      if (!company_id) throw new Error('Missing companyId');
+
+      setCompanyId(company_id);
+
+      const { data, error } = await supabase
+        .from('machines')
+        .select('*')
+        .eq('company_id', company_id);
+
+      if (error) throw error;
+
+      setMachines(data);
+    });
+  };
+
+  const unsubscribe = navigation.addListener('focus', fetchCompanyAndMachines);
+  return unsubscribe;
+}, [navigation]);
               
 
   const goToMachine = (machineId) => {
