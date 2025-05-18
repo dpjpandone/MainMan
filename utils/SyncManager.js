@@ -7,6 +7,29 @@ import { addInAppLog } from '../utils/InAppLogger';
 
 const activeSyncs = {};
 
+export const MUTATION_LABELS = new Set([
+  'markProcedureComplete',
+  'addProcedure',
+  'updateProcedureSettings',
+  'uploadProcedureImage',
+  'uploadProcedureFile',
+  'saveProcedureDescription',
+  'updateMachineShop',
+  'setImageCaptionDeferred',
+]);
+
+
+///syync failure dev toggle
+let DEV_FORCE_ALL_JOB_FAILURES = false;
+
+export function setDevForceAllJobFailures(enabled) {
+  DEV_FORCE_ALL_JOB_FAILURES = enabled;
+}
+
+export function getDevForceAllJobFailures() {
+  return DEV_FORCE_ALL_JOB_FAILURES;
+}
+
 // Start a sync operation with a label
 export function startSync(label = 'anonymous') {
   addInAppLog(`[SYNC START] ${label}`);
@@ -90,6 +113,13 @@ export async function tryNowOrQueue(label, payload, { attempts = 3, delayMs = 30
 
   for (let i = 0; i < attempts; i++) {
     try {
+
+       // 🔥 DEV FAILURE INJECTION
+      if (getDevForceAllJobFailures() && MUTATION_LABELS.has(label)) {
+        addInAppLog(`[SYNC] ❌ Forced failure triggered for: ${label}`);
+        throw new Error(`[FORCED FAIL] tryNowOrQueue is set to fail mutate: ${label}`);
+      }
+
       addInAppLog(`[SYNC] Attempt ${i + 1} for ${label}`);
       const result = await executor(payload);
       addInAppLog(`[SYNC] Job ${label} succeeded on attempt ${i + 1}`);

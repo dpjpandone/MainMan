@@ -6,6 +6,8 @@ import NetInfo from '@react-native-community/netinfo';
 import { addInAppLog } from '../utils/InAppLogger';
 import { notifyJobComplete } from '../utils/SyncManager';
 import { PendingHourglass } from '../styles/globalStyles';
+import { getDevForceAllJobFailures } from '../utils/SyncManager';
+import { MUTATION_LABELS } from '../utils/SyncManager';
 
 // Global setters (used outside component scope)
 export let setGlobalSyncing = () => {};
@@ -103,44 +105,50 @@ export function FailedSyncBanner() {
   if (!failedJobs || failedJobs.length === 0) return null;
   //console.log('[DEBUG] failedJobs in modal:', failedJobs);
 
-  return (
-    <Modal visible transparent animationType="fade">
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContainer}>
-          <Text style={styles.modalTitle}>Upload Failed</Text>
-          <Text style={styles.modalText}>
-            {failedJobs.length} upload{failedJobs.length > 1 ? 's' : ''} failed to sync.
-          </Text>
+return (
+  <Modal visible transparent animationType="fade">
+    <View style={styles.modalOverlay}>
+      <View style={styles.modalContainer}>
+        <Text style={styles.modalTitle}>Upload Failed</Text>
+        <Text style={styles.modalText}>
+          {failedJobs.length} upload{failedJobs.length > 1 ? 's' : ''} failed to sync.
+        </Text>
 
-          <View style={{ flexDirection: 'row', justifyContent: 'center' }}>
-            <TouchableOpacity
-              onPress={() => {
-                failedJobs.forEach(job => {
-                  job.attemptCount = 0;
-                  job.status = 'queued';
-                });
-                setGlobalFailedJobs([]);
-                setGlobalQueuedJobCount(prev => prev + failedJobs.length);
-                runSyncQueue(); // Retry now
-              }}
-              style={[styles.modalButton, { marginRight: 10 }]}
-            >
-              <Text style={styles.modalButtonText}>Retry</Text>
-            </TouchableOpacity>
+        <View style={{ flexDirection: 'row', justifyContent: 'center' }}>
+          <TouchableOpacity
+            onPress={() => {
+              failedJobs.forEach(job => {
+                job.attemptCount = 0;
+                job.status = 'queued';
+              });
+              setGlobalFailedJobs([]);
+              setGlobalQueuedJobCount(prev => prev + failedJobs.length);
+              runSyncQueue(); // Retry now
+            }}
+            style={[styles.modalButton, { marginRight: 10 }]}
+          >
+            <Text style={styles.modalButtonText}>Retry</Text>
+          </TouchableOpacity>
 
-            <TouchableOpacity
-              onPress={() => setGlobalFailedJobs([])}
-              style={[styles.modalButton, { backgroundColor: '#888' }]}
-            >
-              <Text style={[styles.modalButtonText, { color: '#fff' }]}>Dismiss</Text>
-            </TouchableOpacity>
-          </View>
+<TouchableOpacity
+  onPress={async () => {
+    for (const job of failedJobs) {
+      await removeJob(job.id); // ✅ Remove from storage
+      addInAppLog(`[DISMISS] Removed failed job: ${job.label}`);
+    }
+    setGlobalFailedJobs([]);           // ✅ Clear from memory
+    acknowledgeSyncFailure(true);      // ✅ Suppress stale indicators
+  }}
+  style={[styles.modalButton, { backgroundColor: '#888' }]}
+>
+  <Text style={[styles.modalButtonText, { color: '#fff' }]}>Dismiss</Text>
+</TouchableOpacity>
         </View>
       </View>
-    </Modal>
-  );
+    </View>
+  </Modal>
+);
 }
-
 // ---------------------------
 // QUEUE RUNNER
 // ---------------------------
@@ -152,15 +160,33 @@ export async function runSyncQueue() {
   addInAppLog(`[RUNNER] Loaded jobs: ${jobs.length}`);
 
   for (const job of jobs) {
-    if (!shouldRetry(job)) {
-      addInAppLog(`[RUNNER] Skipped job ${job.id} (${job.label}) — not retryable`);
-      continue;
-    }
+if (!shouldRetry(job)) {
+  addInAppLog(`[RUNNER] Skipped job ${job.id} (${job.label}) — not retryable`);
+  
+  // 🔴 Mark job as permanently failed
+  await markJobAsFailed(job.id);
+  addInAppLog(`[RUNNER] Job ${job.id} permanently failed`);
+
+  // 🧠 Update global sync state for banner display
+  const failed = await loadJobs();
+  const failedJobs = failed.filter(j => j.status === 'failed');
+  setGlobalFailedJobs(failedJobs);
+  setGlobalSyncFailed(true);
+  acknowledgeSyncFailure(false);
+
+  continue; // or return if you're only running one job
+}
 
     try {
       addInAppLog(`[RUNNER] Executing job ${job.id} (${job.label})`);
       const executor = jobExecutors[job.label];
       if (!executor) throw new Error(`No executor for label: ${job.label}`);
+
+      ///force sync failure
+if (getDevForceAllJobFailures() && MUTATION_LABELS.has(job.label)) {
+  addInAppLog(`[RUNNER] ❌ Forced failure during queue retry: ${job.label}`);
+  throw new Error(`[FORCED FAIL] runSyncQueue failed: ${job.label}`);
+}
 
       await executor(job.payload);
       addInAppLog(`[RUNNER] Executor finished: ${job.label}`);

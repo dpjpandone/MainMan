@@ -17,7 +17,9 @@ import { SyncProvider, CombinedSyncBanner, FailedSyncBanner } from './contexts/S
 import { registerLogListener, unregisterLogListener, clearInAppLogs, pushLogsToSupabase, LOGGING_ENABLED } from './utils/InAppLogger';
 import { setGlobalStaleData } from './contexts/SyncContext';
 import { StaleDataOverlay } from './contexts/SyncContext';
-
+///force failure dev toggle
+import { setDevForceAllJobFailures } from './utils/SyncManager';
+setDevForceAllJobFailures(false);
 
 // Screens
 import HomeScreen from './screens/HomeScreen';
