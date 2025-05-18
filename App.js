@@ -10,7 +10,7 @@ import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-nati
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-
+import FailedSyncOverlay from './components/FailedSyncOverlay';
 import LoginScreen from './screens/LoginScreen';
 import { AppContext } from './contexts/AppContext';
 import { SyncProvider, CombinedSyncBanner, FailedSyncBanner } from './contexts/SyncContext';
@@ -168,9 +168,9 @@ export default function App() {
             </NavigationContainer>
 
             <StatusBar style="light" backgroundColor="#000" />
-            <CombinedSyncBanner />
+            <FailedSyncOverlay />
             <StaleDataOverlay />
-            <FailedSyncBanner />
+            <CombinedSyncBanner />
             {LOGGING_ENABLED && <InAppLogger />}
           </GestureHandlerRootView>
         </SafeAreaProvider>
