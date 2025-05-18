@@ -174,10 +174,16 @@ export async function runSyncQueue() {
       addInAppLog(`[RUNNER] Job ${job.id} failed: ${err?.message || err}`);
       await incrementRetry(job.id);
 
-      if (job.attemptCount + 1 >= 5) {
-        await markJobAsFailed(job.id);
-        addInAppLog(`[RUNNER] Job ${job.id} permanently failed`);
-      }
+if (job.attemptCount + 1 >= 5) {
+  await markJobAsFailed(job.id);
+  addInAppLog(`[RUNNER] Job ${job.id} permanently failed`);
+
+  const failed = await loadJobs();                          // ✅ Needed
+  const failedJobs = failed.filter(j => j.status === 'failed');  // ✅ Needed
+  setGlobalFailedJobs(failedJobs);
+  setGlobalSyncFailed(true);
+  acknowledgeSyncFailure(false);
+     }
     }
   }
 
