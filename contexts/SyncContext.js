@@ -17,6 +17,24 @@ export let setGlobalQueuedJobCount = () => {};
 export let setGlobalFailedJobs = () => {};
 export let setGlobalStaleData = () => {};
 
+export let getNextRetryMs = () => 0;
+
+function updateNextRetryMs(jobs = []) {
+  const now = Date.now();
+  let minWait = Infinity;
+
+  for (const job of jobs) {
+    if (job.status !== 'queued') continue;
+    const baseDelay = 3000;
+    const delay = baseDelay * Math.pow(2, job.attemptCount);
+    const timeUntil = delay - (now - job.lastAttempt);
+    if (timeUntil > 0) minWait = Math.min(minWait, timeUntil);
+  }
+
+  getNextRetryMs = () => Math.max(0, Math.floor(minWait));
+}
+
+
 const SyncContext = createContext();
 // Fetch retry subscription system
 const reconnectListeners = new Set();
@@ -232,7 +250,7 @@ function shouldRetry(job) {
 
 export function StaleDataOverlay({ style = {}, centered = false }) {
   
-  const { isSyncing, hasStaleData, syncAcknowledged } = useSync();
+const { isSyncing, hasStaleData, syncAcknowledged, queuedJobCount } = useSync();
   const [visible, setVisible] = useState(false);
   const startTimeRef = useRef(null);
   const timeoutRef = useRef(null);
@@ -287,7 +305,8 @@ export function StaleDataOverlay({ style = {}, centered = false }) {
   }, []);
 
 
-  if (!visible) return null;
+const shouldShow = visible || queuedJobCount > 0;
+if (!shouldShow) return null;
 
  return (
     <View
@@ -306,23 +325,47 @@ export function StaleDataOverlay({ style = {}, centered = false }) {
   );
 }
 
+//COMBINED SYNC BANNER
 export function CombinedSyncBanner() {
-  const { queuedJobCount } = useSync();
+  const { queuedJobCount, isSyncing } = useSync();
   const [dots, setDots] = useState('');
+  const [retryCountdown, setRetryCountdown] = useState(null);
+  const [isConnected, setIsConnected] = useState(true);
   const dotCount = useRef(0);
 
   useEffect(() => {
     const interval = setInterval(() => {
       dotCount.current = (dotCount.current + 1) % 4;
       setDots('.'.repeat(dotCount.current));
-    }, 400);
+
+      const ms = getNextRetryMs?.() ?? 0;
+      setRetryCountdown(ms > 0 ? Math.ceil(ms / 1000) : null);
+    }, 564);
+
     return () => clearInterval(interval);
   }, []);
 
-  const shouldRender = queuedJobCount > 0;
-  if (!shouldRender) return null;
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener(state => {
+      setIsConnected(state.isConnected);
+    });
+    return () => unsubscribe();
+  }, []);
 
-  const bannerText = `QUEUE ACTIVE (${queuedJobCount} job${queuedJobCount > 1 ? 's' : ''})${dots}`;
+  if (queuedJobCount <= 0) return null;
+
+  let baseText = '';
+  if (isSyncing) {
+    baseText = `SYNCING (${queuedJobCount} job${queuedJobCount > 1 ? 's' : ''})`;
+  } else if (!isConnected) {
+    baseText = `WAITING FOR CONNECTION`;
+  } else if (retryCountdown !== null) {
+    baseText = `${queuedJobCount} JOB${queuedJobCount > 1 ? 'S' : ''} — RETRYING IN ${retryCountdown}s`;
+  } else {
+    baseText = `QUEUE ACTIVE (${queuedJobCount} job${queuedJobCount > 1 ? 's' : ''})`;
+  }
+
+  const bannerText = `${baseText}${dots}`;
   const topPadding = Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 0;
 
   return (

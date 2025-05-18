@@ -481,7 +481,7 @@ export const PendingHourglass = ({ style: externalStyle = {}, centered = false }
   };
 
   useEffect(() => {
-    const delays = [250, 750, 1250];
+    const delays = [250, 752, 1254];
     let currentFrame = 0;
 
     const advanceFrame = () => {
