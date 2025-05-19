@@ -59,20 +59,21 @@ onPress={() => {
     </Text>
 
     {/* Retry Button on Right */}
-    <TouchableOpacity
-      onPress={() => {
-        failedJobs.forEach(job => {
-          job.attemptCount = 0;
-          job.status = 'queued';
-        });
-        setGlobalFailedJobs([]);
-        setGlobalQueuedJobCount(prev => prev + failedJobs.length);
-        runSyncQueue();
-      }}
-      style={[styles.button, styles.retry]}
-    >
-      <Text style={styles.retryText}>Retry</Text>
-    </TouchableOpacity>
+<TouchableOpacity
+  onPress={() => {
+    failedJobs.forEach(job => {
+      job.attemptCount = 0;
+      job.status = 'queued';
+    });
+    setGlobalFailedJobs([]);
+    setGlobalQueuedJobCount(prev => prev + failedJobs.length);
+    acknowledgeSyncFailure(true); // ✅ Clear stale flag
+    runSyncQueue();
+  }}
+  style={[styles.button, styles.retry]}
+>
+  <Text style={styles.retryText}>Retry</Text>
+</TouchableOpacity>
   </View>
 );
 }

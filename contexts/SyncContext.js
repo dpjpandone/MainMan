@@ -171,28 +171,25 @@ return (
 // QUEUE RUNNER
 // ---------------------------
 export async function runSyncQueue() {
-  addInAppLog('[RUNNER] runSyncQueue() triggered'); // 🔍 proves queue fired
+  const state = await NetInfo.fetch();
+  if (!state.isConnected) {
+    addInAppLog('[RUNNER] Aborting runSyncQueue — offline');
+    return;
+  }
+
+  addInAppLog('[RUNNER] runSyncQueue() triggered');
 
   await new Promise(res => setTimeout(res, 2000));
   const jobs = await loadJobs();
   addInAppLog(`[RUNNER] Loaded jobs: ${jobs.length}`);
 
   for (const job of jobs) {
-if (!shouldRetry(job)) {
-  addInAppLog(`[RUNNER] Skipped job ${job.id} (${job.label}) — not retryable`);
-  
-  // 🔴 Mark job as permanently failed
-  await markJobAsFailed(job.id);
-  addInAppLog(`[RUNNER] Job ${job.id} permanently failed`);
+const devFail = getDevForceAllJobFailures() && MUTATION_LABELS.has(job.label);
 
-  // 🧠 Update global sync state for banner display
-  const failed = await loadJobs();
-  const failedJobs = failed.filter(j => j.status === 'failed');
-  setGlobalFailedJobs(failedJobs);
-  setGlobalSyncFailed(true);
-  acknowledgeSyncFailure(false);
-
-  continue; // or return if you're only running one job
+if (!devFail && !shouldRetry(job)) {
+  const retryIn = getNextRetryMs([job]);
+  addInAppLog(`[RUNNER] Skipping job ${job.id} — not ready (retry in ${retryIn}ms)`);
+  continue;
 }
 
     try {
@@ -200,7 +197,7 @@ if (!shouldRetry(job)) {
       const executor = jobExecutors[job.label];
       if (!executor) throw new Error(`No executor for label: ${job.label}`);
 
-      ///force sync failure
+addInAppLog(`[DEBUG] DevFail=${getDevForceAllJobFailures()}, Label=${job.label}, IsMutation=${MUTATION_LABELS.has(job.label)}`);
 if (getDevForceAllJobFailures() && MUTATION_LABELS.has(job.label)) {
   addInAppLog(`[RUNNER] ❌ Forced failure during queue retry: ${job.label}`);
   throw new Error(`[FORCED FAIL] runSyncQueue failed: ${job.label}`);
@@ -218,16 +215,16 @@ if (getDevForceAllJobFailures() && MUTATION_LABELS.has(job.label)) {
       addInAppLog(`[RUNNER] Job ${job.id} failed: ${err?.message || err}`);
       await incrementRetry(job.id);
 
-if (job.attemptCount + 1 >= 5) {
-  await markJobAsFailed(job.id);
-  addInAppLog(`[RUNNER] Job ${job.id} permanently failed`);
+      if (job.attemptCount + 1 >= 5) {
+        await markJobAsFailed(job.id);
+        addInAppLog(`[RUNNER] Job ${job.id} permanently failed`);
 
-  const failed = await loadJobs();                          // ✅ Needed
-  const failedJobs = failed.filter(j => j.status === 'failed');  // ✅ Needed
-  setGlobalFailedJobs(failedJobs);
-  setGlobalSyncFailed(true);
-  acknowledgeSyncFailure(false);
-     }
+        const failed = await loadJobs();
+        const failedJobs = failed.filter(j => j.status === 'failed');
+        setGlobalFailedJobs(failedJobs);
+        setGlobalSyncFailed(true);
+        acknowledgeSyncFailure(false);
+      }
     }
   }
 
