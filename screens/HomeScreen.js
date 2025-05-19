@@ -76,11 +76,17 @@ return () => {
 
     setModalVisible(false);
   
-    await wrapWithSync('addMachine', async () => {
-      const { data, error } = await supabase
-        .from('machines')
-        .insert([{ name: newMachineName.trim(), company_id: companyId }])
-        .select();
+await wrapWithSync('addMachine', async () => {
+  const defaultShop = selectedFilterShop !== 'All' ? selectedFilterShop : null;
+
+  const { data, error } = await supabase
+    .from('machines')
+    .insert([{
+      name: newMachineName.trim(),
+      company_id: companyId,
+      ...(defaultShop && { shop: defaultShop }),
+    }])
+    .select();
   
         if (error) throw error;
   
