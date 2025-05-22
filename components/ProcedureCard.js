@@ -47,7 +47,7 @@ const [attachmentDeleteMode, setAttachmentDeleteMode] = useState(false);
   const intervalDays = item.interval_days || 0;
 const isPastDue = isProcedurePastDue(item);
   const [galleryKey, setGalleryKey] = useState(0);
-const [captions, setCaptions] = useState(item.captions || { image: {}, file: {} });
+const [captions, setCaptions] = useState({});
 const [captionModalVisible, setCaptionModalVisible] = useState(false);
 const [captionTargetUri, setCaptionTargetUri] = useState(null);
 
@@ -69,10 +69,23 @@ const loadProcedureDetails = async () => {
     const cleanedUrls = (data.image_urls || []).filter(uri => uri.startsWith('http'));
     setImageUrls(cleanedUrls);
     setGalleryKey(prev => prev + 1);
-    setCaptions(data.captions || { image: {}, file: {} });
+const { data: captionRows, error: captionError } = await supabase
+  .from('attachment_captions')
+  .select('file_url, caption')
+  .in('file_url', cleanedUrls);
+
+if (captionError) {
+  addInAppLog('[CAPTIONS] Failed to load captions: ' + captionError.message);
+} else {
+  const captionMap = {};
+  captionRows?.forEach(row => {
+    captionMap[row.file_url] = row.caption;
+  });
+  setCaptions(captionMap);
+}
     setFileUrls(data.file_urls || []);
     setFileLabels(data.file_labels || []);
-    addInAppLog('[DEBUG] Captions object received from Supabase: ' + JSON.stringify(data.captions));
+addInAppLog('[CAPTIONS] Captions loaded from attachment_captions table.');
   });
 };
 
@@ -239,7 +252,6 @@ await tryNowOrQueue('saveProcedureDescription', {
   imageUrls: imageUrls.filter(uri => uri.startsWith('http')), // ✅ Clean here
   fileUrls,
   fileLabels,
-  captions,
 });
   
 setDetailsEditMode(false);
@@ -265,7 +277,21 @@ setAttachmentDeleteMode(false);
 const cleanedUrls = (data.image_urls || []).filter(uri => uri.startsWith('http'));
 setImageUrls(cleanedUrls);
 setGalleryKey(prev => prev + 1);
-          setCaptions(data.captions || { image: {}, file: {} });
+
+const { data: captionRows, error: captionError } = await supabase
+  .from('attachment_captions')
+  .select('file_url, caption')
+  .in('file_url', cleanedUrls);
+
+if (captionError) {
+  addInAppLog('[CAPTIONS] Failed to reload captions: ' + captionError.message);
+} else {
+  const captionMap = {};
+  captionRows?.forEach(row => {
+    captionMap[row.file_url] = row.caption;
+  });
+  setCaptions(captionMap);
+}
           setFileUrls(data.file_urls || []);
           setFileLabels(data.file_labels || []);
         });
@@ -316,33 +342,20 @@ const handleImagePick = async () => {
 
 
 const handleSaveCaption = async (captionText) => {
-  // ✅ Optimistic update
-  setCaptions(prev => {
-    const isLocal = captionTargetUri.startsWith('file://');
-    const matchingSupabaseUrl = isLocal
-      ? imageUrls.find(u => !u.startsWith('file://') && u.includes(lastPickedFileNameRef.current))
-      : null;
-
-    const keyToUse = matchingSupabaseUrl || captionTargetUri;
-
-    return {
-      ...prev,
-      image: {
-        ...prev.image,
-        [keyToUse]: captionText,
-      },
-    };
-  });
+  // ✅ Optimistic update (flat format)
+  setCaptions(prev => ({
+    ...prev,
+    [captionTargetUri]: captionText,
+  }));
 
   // ✅ Close modal
   setCaptionModalVisible(false);
 
   // ✅ Queue caption job if image hasn't synced yet
-  if (captionTargetUri?.startsWith('file://')) {
-    addInAppLog('[CAPTION DEBUG] About to evaluate caption queue conditions');
-addInAppLog('[CAPTION DEBUG] captionTargetUri: ' + captionTargetUri);
-    addInAppLog('[CAPTION DEBUG] fileName ref: ' + lastPickedFileNameRef.current);
 
+  if (captionTargetUri?.startsWith('file://')) {
+      addInAppLog(`[DEBUG] captionTargetUri value: ${captionTargetUri}`);
+  addInAppLog(`[DEBUG] lastPickedFileNameRef = ${lastPickedFileNameRef.current}`);
     const fileName = lastPickedFileNameRef.current;
     if (fileName) {
       tryNowOrQueue('setImageCaptionDeferred', {
@@ -356,7 +369,16 @@ addInAppLog('[CAPTION DEBUG] captionTargetUri: ' + captionTargetUri);
       addInAppLog('[CAPTION SYNC] Skipped caption queue — no fileName available.');
     }
   } else {
-    addInAppLog('[CAPTION DEBUG] captionTargetUri is not local — skipping caption queue.');
+    // 🔁 Direct write for already-uploaded images
+    const { error } = await supabase
+      .from('attachment_captions')
+      .upsert({ file_url: captionTargetUri, caption: captionText }, { onConflict: 'file_url' });
+
+    if (error) {
+      addInAppLog('[CAPTION SYNC] ❌ Failed direct caption save: ' + error.message);
+    } else {
+      addInAppLog('[CAPTION SYNC] ✅ Direct caption saved for: ' + captionTargetUri);
+    }
   }
 };
   //main return
@@ -610,7 +632,7 @@ setAttachmentDeleteMode(prev => {
   uri={captionTargetUri}
   captions={captions}
   setCaptions={setCaptions}
-  initialCaption={captions?.image?.[captionTargetUri] || ''}
+initialCaption={captions?.[captionTargetUri] || ''}
   onSubmit={handleSaveCaption}
   onCancel={() => setCaptionModalVisible(false)}
 />

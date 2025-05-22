@@ -327,21 +327,17 @@ addInAppLog(`[UPLOAD] Starting image upload to Supabase: ${fileName}`);
     addInAppLog(`[UPLOAD] Image uploaded and database updated: ${publicUrl}`);
 
     // 🧠 Patch captions in memory if available
-    if (typeof setCaptions === 'function') {
-      setCaptions(prev => {
-        const oldCaption = prev?.image?.[localUri];
-        if (!oldCaption) return prev;
+if (typeof setCaptions === 'function') {
+  setCaptions(prev => {
+    const oldCaption = prev?.[localUri];
+    if (!oldCaption) return prev;
 
-        const updatedImage = { ...prev.image };
-        delete updatedImage[localUri];
-        updatedImage[publicUrl] = oldCaption;
-
-        return {
-          ...prev,
-          image: updatedImage,
-        };
-      });
-    }
+    const updated = { ...prev };
+    delete updated[localUri];
+    updated[publicUrl] = oldCaption;
+    return updated;
+  });
+}
 
     if (localUri.startsWith('file://')) {
       try {

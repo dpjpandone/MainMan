@@ -235,7 +235,7 @@ setImageCaptionDeferred: async ({ procedureId, localUri, caption, fileName }) =>
 
   const { data, error } = await supabase
     .from('procedures')
-    .select('image_urls, captions')
+    .select('image_urls')
     .eq('id', procedureId)
     .single();
 
@@ -244,9 +244,7 @@ setImageCaptionDeferred: async ({ procedureId, localUri, caption, fileName }) =>
     throw new Error(`[DEFERRED] Failed to fetch procedure: ${error.message}`);
   }
 
-  const { image_urls = [], captions = { image: {}, file: {} } } = data;
-
-  // 🧠 Parse fallback filename if not passed
+  const image_urls = data?.image_urls || [];
   const fallbackName = localUri.split('/').pop();
   const nameToUse = fileName || fallbackName;
 
@@ -260,27 +258,21 @@ setImageCaptionDeferred: async ({ procedureId, localUri, caption, fileName }) =>
     throw new Error('[DEFERRED] Supabase URL not available yet');
   }
 
-  const updatedCaptions = {
-    ...captions,
-    image: {
-      ...(captions.image || {}),
-      [matchedUrl]: caption,
-    },
-    file: captions.file || {},
-  };
-
   const { error: updateError } = await supabase
-    .from('procedures')
-    .update({ captions: updatedCaptions })
-    .eq('id', procedureId);
+    .from('attachment_captions')
+    .upsert({ file_url: matchedUrl, caption }, { onConflict: 'file_url' });
 
   if (updateError) {
     addInAppLog(`[DEFERRED] ❌ Failed to update caption: ${updateError.message}`);
     throw new Error(`[DEFERRED] Failed to update caption: ${updateError.message}`);
   }
 
-addInAppLog(`[DEFERRED] ✅ Caption synced for: ${matchedUrl}`);
-notifyJobComplete('setImageCaptionDeferred', { procedureId }); 
+  addInAppLog(`[DEBUG] Upserting to attachment_captions: ${matchedUrl} = "${caption}"`);
+
+
+  addInAppLog(`[DEFERRED] ✅ Caption synced for: ${matchedUrl}`);
+  notifyJobComplete('setImageCaptionDeferred', { procedureId });
 }
+
 
 };

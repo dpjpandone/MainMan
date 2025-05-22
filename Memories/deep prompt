@@ -1,0 +1,84 @@
+You're analyzing the MainMan repository. I need to identify **all files that interact with image captions**, directly or indirectly. This is for a full migration to a normalized image caption model in the backend.
+
+Please scan for **any file that does any of the following**:
+
+1. Reads from, writes to, or updates:
+   - `captions`
+   - `captions.image`
+   - `captions.file`
+
+2. Fetches or updates Supabase data that includes:
+   - `image_urls`
+   - `captions` (even if it’s not used explicitly — e.g. part of a `select('*')` or bundled in a `procedure` object)
+
+3. Displays or uses image captions in the UI (e.g. under image thumbnails, in modals, or inline with `imageUrls`)
+
+4. Queues, processes, or executes jobs related to caption syncing
+   - e.g. `setImageCaptionDeferred`, `uploadProcedureImage`, or similar
+   - Includes jobs that rely on `fileName`, `localUri`, or URI patching logic
+
+5. Preloads procedure-related data (from Supabase or context) where `captions` might be implicitly included, even if never referenced by name
+
+6. Performs logic related to optimistic UI updates or patching for image captions
+
+---
+
+### ✅ Your output should include:
+
+- A complete list of **all files** that touch image caption logic
+- A short description of what each file does with respect to captions
+- (If possible) Specific function names or line ranges for quick auditing
+
+This list should be **strictly limited to caption-related behavior**. Ignore logic that deals with unrelated file types like PDFs unless it shares the same caption structures.
+
+---
+
+### 📎 Reference: Supabase Database Schema Snapshot
+
+> Use the schema below to identify all fields that relate to image captions or may carry them implicitly (e.g. inside `procedures`, `image_urls`, `captions`, etc.)
+
+| table_name             | column_name    | data_type                   |
+| ---------------------- | -------------- | --------------------------- |
+| companies              | id             | uuid                        |
+| companies              | company_name   | text                        |
+| companies              | created_at     | timestamp with time zone    |
+| debug_logs             | id             | uuid                        |
+| debug_logs             | created_at     | timestamp with time zone    |
+| debug_logs             | log_text       | text                        |
+| debug_logs             | tag            | text                        |
+| debug_logs             | device_id      | text                        |
+| machines               | id             | uuid                        |
+| machines               | name           | text                        |
+| machines               | company_id     | uuid                        |
+| machines               | created_at     | timestamp with time zone    |
+| machines               | shop           | text                        |
+| non_routine_procedures | id             | uuid                        |
+| non_routine_procedures | company_id     | uuid                        |
+| non_routine_procedures | machine_name   | text                        |
+| non_routine_procedures | procedure_name | text                        |
+| non_routine_procedures | description    | text                        |
+| non_routine_procedures | due_date       | date                        |
+| non_routine_procedures | created_at     | timestamp with time zone    |
+| procedures             | id             | uuid                        |
+| procedures             | machine_id     | uuid                        |
+| procedures             | procedure_name | text                        |
+| procedures             | description    | text                        |
+| procedures             | interval_days  | integer                     |
+| procedures             | last_completed | timestamp without time zone |
+| procedures             | created_at     | timestamp with time zone    |
+| procedures             | image_urls     | jsonb                       |
+| procedures             | due_date       | timestamp without time zone |
+| procedures             | company_id     | uuid                        |
+| procedures             | file_urls      | ARRAY                       |
+| procedures             | file_labels    | jsonb                       |
+| procedures             | completed_by   | uuid                        |
+| procedures             | captions       | jsonb                       |
+| profiles               | id             | uuid                        |
+| profiles               | initials       | character varying           |
+| profiles               | created_at     | timestamp with time zone    |
+| shops                  | id             | uuid                        |
+| shops                  | company_id     | uuid                        |
+| shops                  | name           | text                        |
+| shops                  | inserted_at    | timestamp with time zone    |
+| test_sync              | id             | integer                     |
+| test_sync              | counter        | integer                     |

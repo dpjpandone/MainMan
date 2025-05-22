@@ -289,19 +289,19 @@ const renderImage = (uri, index) => {
           {attachmentDeleteMode && renderStrike()}
         </TouchableOpacity>
 
-{captions?.image?.[uri] && (
+{captions?.[uri] && (
   <View style={{
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: 'rgba(32, 32, 32, 0.6)', // soft dark overlay
+    backgroundColor: 'rgba(32, 32, 32, 0.6)',
     paddingVertical: 2,
     paddingHorizontal: 4,
   }}>
-<Text style={styles.captionText} numberOfLines={2}>
-  {captions.image[uri]}
-</Text>
+    <Text style={styles.captionText} numberOfLines={2}>
+      {captions[uri]}
+    </Text>
   </View>
 )}
       </View>

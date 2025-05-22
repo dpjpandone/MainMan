@@ -28,7 +28,7 @@ const [shopModalVisible, setShopModalVisible] = useState(false);
     await wrapWithSync('loadMachineAndProcedures', async () => {
       const { data: machineData } = await supabase
         .from('machines')
-        .select('*')
+.select('id, machine_id, procedure_name, description, due_date, interval_days, last_completed, completed_by, image_urls, file_urls, file_labels')
         .eq('id', machineId)
         .single();
   

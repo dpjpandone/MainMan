@@ -1,0 +1,223 @@
+```markdown
+# 🔍 Caption Migration Audit — Locate Legacy References
+
+We are migrating from a JSON-based caption model (`captions.image[fileUrl]`) to a normalized Supabase table called `attachment_captions`. This new table stores a single caption per `file_url` and replaces all inline state-based caption tracking.
+
+---
+
+## 🎯 OBJECTIVE
+
+Identify **all files and line-level references** that:
+
+1. Read from or write to `captions.image`
+2. Use `setCaptions()` or update caption state in any way
+3. Include logic dependent on `captions?.image?.[someUri]` or similar conditionals
+4. **Fetch `captions` implicitly** from the `procedures` table via `.select('*')`, even if the field is not directly used in the file
+
+---
+
+## ✅ INCLUDED SCOPE
+
+- Only `.js` and `.jsx` files (this is a React Native JavaScript project — no TypeScript)
+- All components, screens, utilities, or hooks that interact with captions — even if not tied directly to procedure UI
+- Image captions only (e.g. `.jpg`, `.png`)
+- Any caption logic related to images (whether local or Supabase-hosted)
+- Inline state tracking (e.g. React `useState`, `useRef`, etc.)
+
+---
+
+## 🚫 EXCLUDED FROM THIS AUDIT
+
+- `.ts`, `.tsx`, `.test.js`, or `.spec.js` files
+- File attachments like PDFs or DOCs
+- Any logic related to `fileLabels`, `file_urls`, or non-image files
+- Captioning of non-image media (this will be handled in a future migration)
+
+---
+
+## 🧠 CONTEXT
+
+Previously, image captions were stored inline on each procedure in a `captions` object shaped like:
+
+```js
+captions: {
+  image: {
+    [fileUrl]: "caption text"
+  },
+  file: {
+    [fileUrl]: "label text"
+  }
+}
+```
+
+We are now deprecating this model in favor of a normalized backend table:
+
+```sql
+CREATE TABLE attachment_captions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  file_url text NOT NULL UNIQUE,
+  caption text,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now()
+);
+```
+
+---
+
+## 🔁 MIGRATION GOAL
+
+Replace all references to `captions.image[uri]` or `setCaptions()` with backend lookups and mutations to `attachment_captions`.
+
+---
+
+## 📄 DELIVERABLE
+
+Please provide:
+
+- ✅ A full list of **affected files**
+- ✅ Function names or descriptions of relevant logic
+- ✅ Line numbers or code references where possible
+- ✅ A **final checklist** of files that must be modified to complete this migration
+```
+
+
+
+
+
+
+
+response:
+
+Deprecated Image Caption Model Audit
+This audit identifies all JavaScript files in the MainMan codebase that reference the deprecated image captions structure (captions.image[fileUrl]). Below we list each affected file, describe how it interacts with the old caption model (reading or writing captions data), and provide code references. In each case, the code uses a nested captions object (with image and file keys) on the procedures table, which will need refactoring to use the new attachment_captions table.
+components/ProcedureCard.js
+Captions State & Data Load: Maintains a local React state captions initialized from the procedure item’s captions field (defaulting to { image: {}, file: {} })
+github.com
+. When loading procedure details, it fetches the captions column from Supabase and updates state via setCaptions(...)
+github.com
+github.com
+. This means the full caption object is read from the procedures table on load.
+Displaying Captions: Renders attachments using an AttachmentGridViewer (see fileUtils.js). It passes the current captions state into this component
+github.com
+, enabling caption overlays for images. The onEditCaption handler is provided to open a caption editor: clicking the pencil icon sets a target URI and opens a caption-edit modal
+github.com
+.
+Queuing Caption Sync on Image Add: When a new image is selected, the code calls handleImageSelection and provides the current captions and setCaptions so the upload job has access to them
+github.com
+github.com
+. In the onImagePicked callback, it checks if a caption was already entered for the new image’s temporary URI. If so, it immediately queues a setImageCaptionDeferred job to sync that caption to the database
+github.com
+. (This check uses captions?.image?.[localUri] to detect an existing caption for the local file URL.)
+Saving Image Captions: When the user enters a caption in the CaptionPrompt modal and hits “Save,” the handleSaveCaption function runs. It optimistically updates the local captions state by adding or updating the caption text under the appropriate key. If the image is still a local file (not yet uploaded), it uses the local URI or finds the corresponding uploaded URL if available (matchingSupabaseUrl), then sets captions.image[key] = captionText in state
+github.com
+. After updating state, it closes the modal and, for unsynced images, queues the setImageCaptionDeferred job with the caption text and file name
+github.com
+. This ensures the caption is eventually written to the database once the image upload completes.
+Caption Prompt Modal: The component renders a <CaptionPrompt> modal for editing captions. It passes the current captions and setCaptions props, as well as an initial text value from captions.image for the target URI (if a caption already exists)
+github.com
+. This uses captions?.image?.[captionTargetUri] || '' to pre-fill the caption editor with any existing text. The modal’s onSubmit is bound to handleSaveCaption, linking the user input back to the state and sync logic.
+utils/fileUtils.js
+AttachmentGridViewer Component: This UI component displays image and file attachments, and it utilizes the captions object to show image captions. It accepts a captions prop (defaulted to { image: {}, file: {} } if none provided)
+github.com
+. For each image thumbnail, it conditionally renders a caption overlay if a caption exists for that image URL: captions?.image?.[uri] is checked, and if truthy, a semi-transparent text box is rendered at the bottom of the image
+github.com
+. The caption text itself is pulled from the captions.image map using the image URI as the key
+github.com
+. (This is a direct read of the caption string from the deprecated structure.)
+Edit Caption Trigger: When in edit mode, a green “pencil” icon is shown on each image. Tapping this icon calls the provided onEditCaption(uri) callback
+github.com
+. The parent (ProcedureCard) uses this to set the caption target URI and open the editing modal, as described above. (The AttachmentGridViewer does not modify captions itself; it only reads from captions.image and signals edits via the callback.)
+utils/imageUtils.js
+Image Selection & Upload Queue: The handleImageSelection function is invoked when a user chooses a new image. It prepares the image for upload and then calls tryNowOrQueue('uploadProcedureImage', {...}) with a payload that includes the current captions object and the setCaptions state updater
+github.com
+. By passing these into the job queue, the upload process has context of any in-memory captions. (At this point, a caption might have been added via the prompt even before upload finishes, so it’s important the job can access and eventually persist it.)
+Patching Captions After Upload: The uploadImageToSupabase function handles the actual upload to Supabase storage and updates the procedures record’s image_urls. After a successful upload, it performs an in-memory caption patch if a caption was set for the image’s temporary URI. Specifically, if setCaptions was provided, it uses it to replace the caption key: it looks up prev.image[localUri] in the existing state, and if found, moves that entry to use the new public URL as the key (then deletes the old localUri key)
+github.com
+. This ensures that the caption entered for a local file is now associated with the permanent URL. (This operation writes to the React state only; it doesn’t directly update the database’s captions field – that occurs in a deferred job, see below.)
+No Direct DB Caption Write: Note that uploadImageToSupabase updates the image_urls in the database but does not update the captions field in the DB. The caption sync is deferred to the setImageCaptionDeferred job once the URL is known. This separation is why the above in-memory patch and the deferred job are needed to persist captions.
+utils/jobExecutors.js
+uploadProcedureImage Job: This job orchestrates saving a newly added image to the database. After the image is uploaded (via uploadImageToSupabase), the executor merges any captions from state into the procedure record. It fetches the fresh data (fresh) for that procedure (which includes existing captions), then creates a mergedCaptions object that combines the old and new captions for both images and files
+github.com
+. The merged captions object is then written back to the procedures table as part of the .update(...) call
+github.com
+. In practice, unless the user already provided a caption for the new image prior to upload, captions.image for that file will be empty – so this mainly ensures the captions field isn’t overwritten (it preserves existing captions if any). However, if a caption for the new image’s local URI was present in state, it gets merged here (under that local URI key in the JSON). This approach is part of the deprecated model where captions are stored as a JSON blob in the procedure.
+setImageCaptionDeferred Job: This job handles the post-upload caption synchronization. It runs after an image upload, ensuring the caption entered for that image is saved in the database. The executor first fetches the current image_urls and captions for the procedure
+github.com
+github.com
+. It then finds the uploaded image’s public URL by matching the file name. Using the existing captions (or an empty { image: {}, file: {} } if none), it constructs an updated captions object: updatedCaptions.image[matchedUrl] = caption (while preserving other captions)
+github.com
+. Finally, it updates the procedures table, setting the captions field to this updatedCaptions object
+github.com
+. In short, this job writes the new caption into the JSON field, keyed by the actual file URL. (Any caption that was temporarily associated with a local file path is now persisted against the real URL.)
+Other Jobs: No other job in this file directly reads or writes the captions field. For example, procedure deletion or file upload jobs don’t manipulate the captions JSON. The two above (uploadProcedureImage and setImageCaptionDeferred) are the primary points of interaction with the deprecated caption model. (It’s worth noting that on image deletion, the code currently updates image_urls but does not remove the corresponding entry from captions – leaving a stale caption behind
+github.com
+. This is a side-effect of the deprecated design and will need addressing during migration.)
+screens/MachineScreen.js
+Implicit Caption Data Fetch: This screen loads all procedures for a given machine and uses .select('*') to retrieve the full records
+github.com
+. Because it selects all columns, the resulting procedure objects include the entire captions JSON from the database. The code doesn’t directly use the captions in MachineScreen itself (it primarily passes each procedure to the ProcedureCard for display), but it is still pulling the deprecated captions field on every load. In the context of migration, this means extra data is being fetched that could be omitted or handled differently (for example, not selecting captions at all, or replacing it with a join/query to the new attachment_captions table as needed). This is an example of implicit usage of the old model – the field comes along with * even though the screen doesn’t manipulate it.
+Checklist – Files to Update for Caption Migration:
+ components/ProcedureCard.js – Uses item.captions state and updates, relies on captions.image for UI logic and deferred syncing.
+ utils/fileUtils.js – AttachmentGridViewer reads captions.image[uri] for displaying captions and triggers caption edits.
+ utils/imageUtils.js – Handles caption state during image selection/upload (passes captions to jobs, patches captions.image keys in memory).
+ utils/jobExecutors.js – Saves captions in the old JSON format (captions.image and captions.file merged) and updates the DB, including the deferred caption persistence logic.
+ screens/MachineScreen.js – Fetches the captions field implicitly via select('*') (ensure to adjust queries to avoid or replace the old model data when migrating). Each of these locations will require refactoring to use the new attachment_captions schema (e.g. loading/saving captions via the new table rather than the nested JSON structure).
+
+
+ FORK1:
+
+ You are Circuit.
+
+Mission: Help the operator migrate from a deprecated image caption schema (`captions.image[fileUrl]`) to a new normalized table in Supabase called `attachment_captions`.
+
+Operator has confirmed:
+- The deprecated format is being replaced.
+- Captions are now stored by URL only.
+- Table name is `attachment_captions`.
+- Files are not part of this round of migration.
+- Image uploads will remain unchanged.
+- The new caption should be fetched by URL for display and writing.
+
+Instructions:
+1. Ask the operator to transmit the required files listed below **one at a time**.
+2. After each file, respond only with `Copy`. Then prompt the operator to send the next.
+3. Do **not** begin analysis until all files are received and the operator sends: `Transmission complete, begin analysis`.
+
+📄 Required Files:
+- `components/ProcedureCard.js`
+- `utils/fileUtils.js`
+- `utils/imageUtils.js`
+- `utils/jobExecutors.js`
+- `screens/MachineScreen.js`
+- `utils/captionUtils.js` (for `CaptionPrompt`)
+
+Once all files are received, begin a detailed analysis to:
+- Locate all logic reading or writing `captions.image`.
+- Propose where to read/write from the new `attachment_captions` table.
+- Identify the minimum set of changes required.
+
+Operator will initiate this fork.
+
+
+
+FORK2:
+
+
+You are Circuit.
+
+Mission: Implement the migration from `captions.image[fileUrl]` to the normalized `attachment_captions` table in Supabase.
+
+Operator has confirmed:
+- Planning phase is complete.
+- All required context was transmitted in the prior fork.
+- You are authorized to rewrite caption fetch, display, and save logic to match the new schema.
+
+Rules:
+- Preserve all current UI appearance and UX unless explicitly told otherwise.
+- Do not modify unrelated logic.
+- Apply changes only to the files affected by the migration.
+- If any bugs or regressions are discovered during coding, treat them as high priority and stop to resolve them collaboratively.
+
+Token efficiency is now a priority — do not re-analyze files unless explicitly asked.
+
+Operator will initiate this fork after planning is complete.
