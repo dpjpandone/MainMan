@@ -17,6 +17,7 @@ import { CaptionPrompt } from '../utils/captionUtils';
 import { addInAppLog } from '../utils/InAppLogger';
 import { StaleDataOverlay } from '../contexts/SyncContext';
 import { subscribeToReconnect } from '../contexts/SyncContext';
+import NetInfo from '@react-native-community/netinfo';
 
 function isProcedurePastDue(item) {
   const lastCompleted = item?.last_completed ? new Date(item.last_completed) : null;
@@ -351,47 +352,76 @@ const handleSaveCaption = async (captionText) => {
   // ✅ Close modal
   setCaptionModalVisible(false);
 
-  // ✅ Queue caption job if image hasn't synced yet
-  if (captionTargetUri?.startsWith('file://')) {
-    addInAppLog(`[DEBUG] captionTargetUri value: ${captionTargetUri}`);
-    addInAppLog(`[DEBUG] lastPickedFileNameRef = ${lastPickedFileNameRef.current}`);
+  // ✅ Determine if local file
+  const isLocal = captionTargetUri?.startsWith('file://');
 
-    let fileName = lastPickedFileNameRef.current;
+  // ✅ Get filename — priority order:
+  let fileName = lastPickedFileNameRef?.current;
 
-    // 🧠 Fallback to global map if ref is undefined or unchanged
-    if (
-      (!fileName || fileName === lastPickedFileNameRef.current) &&
-      typeof globalThis.fileUriToNameRef === 'object'
-    ) {
-      const fallback = globalThis.fileUriToNameRef[captionTargetUri];
-      if (fallback) {
-        fileName = fallback;
-        addInAppLog(`[DEBUG] fileName fallback from global map: ${captionTargetUri} → ${fileName}`);
-      }
+  if (
+    (!fileName || fileName === lastPickedFileNameRef.current) &&
+    typeof globalThis.fileUriToNameRef === 'object'
+  ) {
+    const fallback = globalThis.fileUriToNameRef[captionTargetUri];
+    if (fallback) {
+      fileName = fallback;
+      addInAppLog(`[DEBUG] fileName fallback from global map: ${captionTargetUri} → ${fileName}`);
     }
+  }
 
-    if (fileName) {
-      tryNowOrQueue('setImageCaptionDeferred', {
-        procedureId: item.id,
-        localUri: captionTargetUri,
-        caption: captionText,
-        fileName,
-      });
-      addInAppLog('[CAPTION SYNC] Caption job queued for: ' + fileName);
-    } else {
+  if (!fileName) {
+    const extracted = captionTargetUri?.split('/').pop();
+    if (extracted) {
+      fileName = extracted;
+      addInAppLog(`[DEBUG] fileName fallback from URI: ${captionTargetUri} → ${fileName}`);
+    }
+  }
+
+  const { isConnected } = await NetInfo.fetch();
+
+  // ✅ Always queue if local file or no network
+  if (isLocal || !isConnected) {
+    if (!fileName) {
       addInAppLog('[CAPTION SYNC] Skipped caption queue — no fileName available.');
+      return;
     }
-  } else {
-    // 🔁 Direct write for already-uploaded images
+
+    tryNowOrQueue('setImageCaptionDeferred', {
+      procedureId: item.id,
+      localUri: captionTargetUri,
+      caption: captionText,
+      fileName,
+    });
+
+    addInAppLog(`[CAPTION SYNC] 🌀 Queued offline caption for: ${fileName}`);
+    return;
+  }
+
+  // 🌐 Direct write if online and hosted
+  try {
     const { error } = await supabase
       .from('attachment_captions')
       .upsert({ file_url: captionTargetUri, caption: captionText }, { onConflict: 'file_url' });
 
-    if (error) {
-      addInAppLog('[CAPTION SYNC] ❌ Failed direct caption save: ' + error.message);
-    } else {
-      addInAppLog('[CAPTION SYNC] ✅ Direct caption saved for: ' + captionTargetUri);
+    if (error) throw error;
+
+    addInAppLog('[CAPTION SYNC] ✅ Direct caption saved for: ' + captionTargetUri);
+  } catch (err) {
+    addInAppLog('[CAPTION SYNC] ❌ Direct save failed, queuing fallback: ' + err.message);
+
+    if (!fileName) {
+      addInAppLog('[CAPTION SYNC] ⚠️ Cannot fallback — no fileName available.');
+      return;
     }
+
+    tryNowOrQueue('setImageCaptionDeferred', {
+      procedureId: item.id,
+      localUri: captionTargetUri,
+      caption: captionText,
+      fileName,
+    });
+
+    addInAppLog('[CAPTION SYNC] 🌀 Fallback caption job queued for: ' + fileName);
   }
 };
   //main return
