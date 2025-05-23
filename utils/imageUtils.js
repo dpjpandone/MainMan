@@ -197,7 +197,14 @@ export async function handleImageSelection({
     const localUri = asset.uri;
     addInAppLog(`[SELECTED] New image picked: ${localUri}`);
 
-    const fileName = `${procedureId}-${Date.now()}.jpg`;
+const fileName = `${procedureId}-${Date.now()}.jpg`;
+
+// 🧠 Patch global map to link this local URI with generated fileName
+if (typeof globalThis.fileUriToNameRef !== 'object') {
+  globalThis.fileUriToNameRef = {};
+}
+globalThis.fileUriToNameRef[localUri] = fileName;
+addInAppLog(`[DEBUG] fileUriToNameRef patched: ${localUri} → ${fileName}`);
 
     // 1. Optimistically add local image to gallery
     const updated = [...imageUrls, localUri];

@@ -352,11 +352,24 @@ const handleSaveCaption = async (captionText) => {
   setCaptionModalVisible(false);
 
   // ✅ Queue caption job if image hasn't synced yet
-
   if (captionTargetUri?.startsWith('file://')) {
-      addInAppLog(`[DEBUG] captionTargetUri value: ${captionTargetUri}`);
-  addInAppLog(`[DEBUG] lastPickedFileNameRef = ${lastPickedFileNameRef.current}`);
-    const fileName = lastPickedFileNameRef.current;
+    addInAppLog(`[DEBUG] captionTargetUri value: ${captionTargetUri}`);
+    addInAppLog(`[DEBUG] lastPickedFileNameRef = ${lastPickedFileNameRef.current}`);
+
+    let fileName = lastPickedFileNameRef.current;
+
+    // 🧠 Fallback to global map if ref is undefined or unchanged
+    if (
+      (!fileName || fileName === lastPickedFileNameRef.current) &&
+      typeof globalThis.fileUriToNameRef === 'object'
+    ) {
+      const fallback = globalThis.fileUriToNameRef[captionTargetUri];
+      if (fallback) {
+        fileName = fallback;
+        addInAppLog(`[DEBUG] fileName fallback from global map: ${captionTargetUri} → ${fileName}`);
+      }
+    }
+
     if (fileName) {
       tryNowOrQueue('setImageCaptionDeferred', {
         procedureId: item.id,
@@ -540,10 +553,19 @@ const handleSaveCaption = async (captionText) => {
               window._setSelectedImageIndex(index);
             }
           }}
-          onEditCaption={(uri) => {
-            setCaptionTargetUri(uri);
-            setCaptionModalVisible(true);
-          }}
+onEditCaption={(uri) => {
+  // Only update the ref if it's not a local URI (hosted image)
+  if (!uri.startsWith('file://')) {
+    const extractedName = uri.split('/').pop();
+    lastPickedFileNameRef.current = extractedName;
+    addInAppLog(`[DEBUG] onEditCaption: extracted fileName = ${extractedName}`);
+  } else {
+    addInAppLog(`[DEBUG] onEditCaption skipped fileName ref — local URI: ${uri}`);
+  }
+
+  setCaptionTargetUri(uri);
+  setCaptionModalVisible(true);
+}}
         />
       ) : (
       <Text style={styles.galleryEmptyText}>No Attachments</Text>
