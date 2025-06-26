@@ -11,7 +11,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { wrapWithSync, tryNowOrQueue } from './SyncManager';
 import { addInAppLog } from '../utils/InAppLogger';
 import { ImageCaptionPrompt } from '../utils/captionUtils';
-import { notifyJobComplete } from '../utils/JobQueue';
+import { notifyJobComplete } from './SyncManager';
 
 const SHOW_HOURGLASS = true; // 🔁 Toggle to test impact on black thumbnails
 
@@ -183,24 +183,23 @@ globalThis.fileUriToNameRef[localUri] = fileName;
 addInAppLog(`[DEBUG] fileUriToNameRef patched: ${localUri} → ${fileName}`);
 
     // ✅ Optimistically update local gallery
-    const updatedUrls = [...(fileUrls || []), localUri];
+// 🧠 Clone state BEFORE appending
+const snapshotBeforeAppend = [...(fileUrls || [])];
 
-    setFileUrls(updatedUrls);
+// ✅ Append localUri for UI only
+const updatedUrls = [...snapshotBeforeAppend, localUri];
+setFileUrls(updatedUrls);
 
-    if (scrollToEnd) {
-      setTimeout(scrollToEnd, 300);
-    }
-
-    const payload = {
-      localUri,
-      label: sanitizedLabel,
-      procedureId,
-      fileName,
-      fileUrls: updatedUrls,
-      setFileUrls,
-    };
-
-    await tryNowOrQueue('uploadProcedureFile', payload);
+// ✅ Send cloned snapshot to the job, not live state
+const payload = {
+  localUri,
+  label: sanitizedLabel,
+  procedureId,
+  fileName,
+  fileUrls: snapshotBeforeAppend,
+  setFileUrls,
+};
+await tryNowOrQueue('uploadProcedureFile', payload);
 
   } catch (err) {
     addInAppLog(`[ERROR] File selection or queuing failed: ${err.message}`);
@@ -299,26 +298,50 @@ const { data: procDataCheck, error: checkError } = await supabase
       throw new Error('Supabase upload failed');
     }
 
-    const updatedUrls = [...fileUrls, publicUrl]; // ✅ correct
+// 🧠 Defensive merge: fetch current list from DB
+const { data: fresh, error: fetchError } = await supabase
+  .from('procedures')
+  .select('file_urls')
+  .eq('id', procedureId)
+  .single();
 
+if (fetchError) throw fetchError;
+
+const existing = (fresh?.file_urls || []).filter(uri => uri.startsWith('http'));
+const merged = Array.from(new Set([...existing, publicUrl]));
+
+// ✅ Now perform the safe update
 const { error: updateError } = await supabase
   .from('procedures')
   .update({
-    file_urls: updatedUrls,
+    file_urls: merged,
   })
-      .eq('id', procedureId);
+  .eq('id', procedureId);
 
-    if (updateError) throw updateError;
+if (updateError) throw updateError;
+
 
     addInAppLog(`[UPLOAD] File uploaded and database updated: ${publicUrl}`);
 
     // ✅ Memory patch: replace localUri with publicUrl
 if (setFileUrls) {
   setFileUrls(prev => {
-    const existing = prev?.filter(uri => uri.startsWith('http')) || [];
-    const updated = Array.from(new Set([...existing, publicUrl]));
-    addInAppLog(`[MEMORY PATCH] Final fileUrls (live dedupe): ${JSON.stringify(updated)}`);
-    return updated;
+    const patched = (prev || []).map(uri => {
+      // Replace any local match with this file's public URL
+      if (uri === localUri || uri.includes(fileName)) {
+        return publicUrl;
+      }
+      return uri;
+    });
+
+    // Fallback: if no match, ensure it’s appended
+    if (!patched.includes(publicUrl)) {
+      patched.push(publicUrl);
+    }
+
+    const deduped = Array.from(new Set(patched));
+    addInAppLog(`[MEMORY PATCH] Updated fileUrls: ${JSON.stringify(deduped)}`);
+    return deduped;
   });
 }
 

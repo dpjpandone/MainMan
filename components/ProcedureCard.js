@@ -197,7 +197,7 @@ addInAppLog('[DEBUG] ProcedureCard callback fired: label=' + label + ', payload=
 
     try {
 if (
-  label === 'uploadProcedureImage' &&
+  (label === 'uploadProcedureImage' || label === 'uploadProcedureFile') &&
   payload.procedureId === item.id &&
   typeof refreshMachine === 'function'
 ) {
@@ -245,15 +245,17 @@ setAttachmentDeleteMode(false);
 
   const saveDescription = async () => {
     try {
-await tryNowOrQueue('saveProcedureDescription', {
-  procedureId: item.id,
-  description,
-  imageUrls: imageUrls.filter(uri => uri.startsWith('http')), // ✅ Clean here
-  fileUrls,
-});
-  
 setDetailsEditMode(false);
 setAttachmentDeleteMode(false);
+
+tryNowOrQueue('saveProcedureDescription', {
+  procedureId: item.id,
+  description,
+  imageUrls: imageUrls.filter(uri => uri.startsWith('http')),
+  fileUrls,
+}).catch((err) => {
+  addInAppLog(`[WARNING] Deferred saveProcedureDescription failed: ${err.message}`);
+});
     } catch (error) {
       console.error('Failed to queue description update:', error);
     }
