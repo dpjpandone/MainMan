@@ -3,14 +3,13 @@
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import { SUPABASE_URL, SUPABASE_BUCKET, SUPABASE_KEY, supabase } from './supaBaseConfig';
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Modal, View, Text, TextInput, TouchableOpacity, Image } from 'react-native';
 import { styles, PendingHourglass } from '../styles/globalStyles';
 import * as Linking from 'expo-linking';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { wrapWithSync, tryNowOrQueue } from './SyncManager';
 import { addInAppLog } from '../utils/InAppLogger';
-import { ImageCaptionPrompt } from '../utils/captionUtils';
 import { notifyJobComplete } from './SyncManager';
 
 const SHOW_HOURGLASS = true; // 🔁 Toggle to test impact on black thumbnails
@@ -18,7 +17,7 @@ const SHOW_HOURGLASS = true; // 🔁 Toggle to test impact on black thumbnails
 export function AttachmentGridViewer({
   imageUrls,
   fileUrls,
-  captions = { image: {}, file: {} },
+  captions = {},
   detailsEditMode,
   attachmentDeleteMode,
   onDeleteAttachment,
@@ -189,6 +188,10 @@ const snapshotBeforeAppend = [...(fileUrls || [])];
 // ✅ Append localUri for UI only
 const updatedUrls = [...snapshotBeforeAppend, localUri];
 setFileUrls(updatedUrls);
+if (typeof scrollToEnd === 'function') {
+  scrollToEnd(); // ✅ Scroll to newest upload for better UX
+}
+
 
 // ✅ Send cloned snapshot to the job, not live state
 const payload = {
