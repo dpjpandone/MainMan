@@ -36,7 +36,6 @@ const [attachmentDeleteMode, setAttachmentDeleteMode] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const galleryScrollRef = useRef(null);
   const [fileUrls, setFileUrls] = useState(item.fileUrls || []);
-  const [fileLabels, setFileLabels] = useState(item.fileLabels || []);
   const [labelPromptVisible, setLabelPromptVisible] = useState(false);
   const [settingsModalVisible, setSettingsModalVisible] = useState(false);
   const [initials, setInitials] = useState('');
@@ -56,7 +55,7 @@ const loadProcedureDetails = async () => {
   await wrapWithSync('loadProcedureDetails', async () => {
     const { data, error } = await supabase
       .from('procedures')
-      .select('description, image_urls, file_urls, file_labels, captions')
+      .select('description, image_urls, file_urls, captions')
       .eq('id', item.id)
       .single();
 
@@ -85,7 +84,6 @@ if (captionError) {
   setCaptions(captionMap);
 }
     setFileUrls(data.file_urls || []);
-    setFileLabels(data.file_labels || []);
 addInAppLog('[CAPTIONS] Captions loaded from attachment_captions table.');
   });
 };
@@ -252,7 +250,6 @@ await tryNowOrQueue('saveProcedureDescription', {
   description,
   imageUrls: imageUrls.filter(uri => uri.startsWith('http')), // ✅ Clean here
   fileUrls,
-  fileLabels,
 });
   
 setDetailsEditMode(false);
@@ -268,7 +265,7 @@ setAttachmentDeleteMode(false);
         await wrapWithSync('restoreProcedureState', async () => {
           const { data, error } = await supabase
             .from('procedures')
-            .select('description, image_urls, file_urls, file_labels, captions')
+            .select('description, image_urls, file_urls, captions')
             .eq('id', item.id)
             .single();
   
@@ -294,7 +291,6 @@ if (captionError) {
   setCaptions(captionMap);
 }
           setFileUrls(data.file_urls || []);
-          setFileLabels(data.file_labels || []);
         });
       } catch (err) {
         addInAppLog('[BACK FALLBACK] Failed to restore data, exiting anyway.');
@@ -556,24 +552,21 @@ const handleSaveCaption = async (captionText) => {
       contentContainerStyle={{ justifyContent: 'center', alignItems: 'center' }}
     >
       {(imageUrls.length > 0 || fileUrls.length > 0) ? (
-        <AttachmentGridViewer
-          key={galleryKey}
-          imageUrls={imageUrls}
-          fileUrls={fileUrls}
-          fileLabels={fileLabels}
+<AttachmentGridViewer
+  key={galleryKey}
+  imageUrls={imageUrls}
+  fileUrls={fileUrls}
           captions={captions}
           detailsEditMode={detailsEditMode}
           attachmentDeleteMode={attachmentDeleteMode}
           onDeleteAttachment={(uri) => {
             if (uri.endsWith('.pdf')) {
-              deleteProcedureFile({
-                uriToDelete: uri,
-                fileUrls,
-                setFileUrls,
-                fileLabels,
-                setFileLabels,
-                procedureId: item.id,
-              });
+deleteProcedureFile({
+  uriToDelete: uri,
+  fileUrls,
+  setFileUrls,
+  procedureId: item.id,
+});
             } else {
               handleDeleteImage(uri);
             }
@@ -664,17 +657,15 @@ setAttachmentDeleteMode(prev => {
   visible={labelPromptVisible}
   onSubmit={(label) => {
     setLabelPromptVisible(false);
-    wrapWithSync('uploadProcedureFile', async () => {
-      await uploadProcedureFile({
-        procedureId: item.id,
-        fileUrls,
-        setFileUrls,
-        scrollToEnd: scrollToGalleryEnd,
-        fileLabels,
-        setFileLabels,
-        label,
-      });
-    });
+wrapWithSync('uploadProcedureFile', async () => {
+  await uploadProcedureFile({
+    procedureId: item.id,
+    fileUrls,
+    setFileUrls,
+    scrollToEnd: scrollToGalleryEnd,
+    label,
+  });
+});
   }}
   onCancel={() => setLabelPromptVisible(false)}
 />

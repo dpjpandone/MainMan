@@ -11,7 +11,108 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { wrapWithSync, tryNowOrQueue } from './SyncManager';
 import { addInAppLog } from '../utils/InAppLogger';
 import { ImageCaptionPrompt } from '../utils/captionUtils';
+import { notifyJobComplete } from '../utils/JobQueue';
+
 const SHOW_HOURGLASS = true; // 🔁 Toggle to test impact on black thumbnails
+
+export function AttachmentGridViewer({
+  imageUrls,
+  fileUrls,
+  captions = { image: {}, file: {} },
+  detailsEditMode,
+  attachmentDeleteMode,
+  onDeleteAttachment,
+  onSelectImage,
+  onEditCaption,
+}) {
+  const renderStrike = () => (
+    <View style={{
+      position: 'absolute',
+      top: 0, left: 0, right: 0, bottom: 0,
+      justifyContent: 'center',
+      alignItems: 'center',
+      zIndex: 2
+    }}>
+      <View style={{
+        position: 'absolute',
+        width: '140%',
+        height: 4,
+        backgroundColor: '#ff0000',
+        transform: [{ rotate: '-45deg' }]
+      }} />
+    </View>
+  );
+
+  const renderImage = (uri, index) => (
+    <View key={`img-${index}`} style={{ position: 'relative' }}>
+      <View style={{ alignItems: 'center' }}>
+        <TouchableOpacity onPress={() => attachmentDeleteMode ? onDeleteAttachment(uri) : onSelectImage(index)}>
+          <Image source={{ uri }} style={styles.thumbnail} />
+          {attachmentDeleteMode && renderStrike()}
+        </TouchableOpacity>
+        {captions?.[uri] && (
+          <View style={{
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            backgroundColor: 'rgba(32, 32, 32, 0.6)',
+            paddingVertical: 2,
+            paddingHorizontal: 4,
+          }}>
+            <Text style={styles.captionText} numberOfLines={2}>
+              {captions[uri]}
+            </Text>
+          </View>
+        )}
+      </View>
+      {SHOW_HOURGLASS && uri.startsWith('file://') && <PendingHourglass />}
+      {detailsEditMode && !attachmentDeleteMode && (
+        <TouchableOpacity
+          onPress={() => onEditCaption(uri)}
+          style={{
+            position: 'absolute',
+            top: 4,
+            left: 4,
+            backgroundColor: '#00ff00',
+            padding: 4,
+            zIndex: 3,
+          }}
+        >
+          <MaterialCommunityIcons name="pencil" color="#000" size={18} />
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+
+  const renderFile = (uri, index) => (
+    <View key={`file-${index}`} style={{ position: 'relative' }}>
+      <TouchableOpacity
+        onPress={() => attachmentDeleteMode ? onDeleteAttachment(uri) : Linking.openURL(uri)}
+        style={styles.pdfTouchable}
+      >
+        <MaterialCommunityIcons name="file-cog-outline" color="#0f0" size={27} />
+        <Text style={styles.pdfLabelText} numberOfLines={3}>
+          {uri.split('/').pop()?.split('-')[0] || 'Unlabeled'}
+        </Text>
+      </TouchableOpacity>
+      {uri.startsWith('file://') && <PendingHourglass />}
+      {attachmentDeleteMode && (
+        <View style={styles.pdfStrikeWrapper}>
+          <View style={styles.pdfStrikeLine} />
+        </View>
+      )}
+    </View>
+  );
+
+  return (
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+      {[...(imageUrls || [])].map(renderImage)}
+      {[...(fileUrls || [])].map(renderFile)}
+    </View>
+  );
+}
+
 
 export function FileLabelPrompt({ visible, onSubmit, onCancel }) {
     const [label, setLabel] = useState('');
@@ -57,8 +158,6 @@ export async function uploadProcedureFile({
   fileUrls,
   setFileUrls,
   scrollToEnd,
-  fileLabels,
-  setFileLabels,
   label,
 }) {
   try {
@@ -74,14 +173,19 @@ export async function uploadProcedureFile({
     const localUri = file.uri;
 
     const sanitizedLabel = label?.trim().replace(/[^a-z0-9_\-]/gi, '_') || 'Untitled';
-    const fileName = `${sanitizedLabel}-${procedureId}-${Date.now()}.pdf`;
+const fileName = `${sanitizedLabel}-${procedureId}-${Date.now()}.pdf`;
+
+// 🧠 Patch global map to link this local URI with generated fileName
+if (typeof globalThis.fileUriToNameRef !== 'object') {
+  globalThis.fileUriToNameRef = {};
+}
+globalThis.fileUriToNameRef[localUri] = fileName;
+addInAppLog(`[DEBUG] fileUriToNameRef patched: ${localUri} → ${fileName}`);
 
     // ✅ Optimistically update local gallery
     const updatedUrls = [...(fileUrls || []), localUri];
-    const updatedLabels = [...(fileLabels || []), sanitizedLabel];
 
     setFileUrls(updatedUrls);
-    setFileLabels(updatedLabels);
 
     if (scrollToEnd) {
       setTimeout(scrollToEnd, 300);
@@ -94,8 +198,6 @@ export async function uploadProcedureFile({
       fileName,
       fileUrls: updatedUrls,
       setFileUrls,
-      fileLabels: updatedLabels,
-      setFileLabels,
     };
 
     await tryNowOrQueue('uploadProcedureFile', payload);
@@ -110,8 +212,6 @@ export async function deleteProcedureFile({
   uriToDelete,
   fileUrls,
   setFileUrls,
-  fileLabels,
-  setFileLabels,
   procedureId,
   refreshMachine,
 }) {
@@ -133,18 +233,15 @@ export async function deleteProcedureFile({
       }
 
       const updatedUrls = fileUrls.filter((_, i) => i !== deleteIndex);
-      const updatedLabels = fileLabels.filter((_, i) => i !== deleteIndex);
 
       setFileUrls(updatedUrls);
-      setFileLabels(updatedLabels);
 
-      const { error: dbError } = await supabase
-        .from('procedures')
-        .update({
-          file_urls: updatedUrls,
-          file_labels: updatedLabels,
-        })
-        .eq('id', procedureId);
+const { error: dbError } = await supabase
+  .from('procedures')
+  .update({
+    file_urls: updatedUrls,
+  })
+  .eq('id', procedureId);
 
       if (dbError) throw dbError;
 
@@ -165,8 +262,6 @@ export async function uploadFileToSupabase({
   fileName,
   setFileUrls,
   fileUrls,
-  setFileLabels,
-  fileLabels,
 }) {
   const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_BUCKET}/${fileName}`;
 
@@ -176,11 +271,11 @@ export async function uploadFileToSupabase({
     return;
   }
 
-  const { data: procDataCheck, error: checkError } = await supabase
-    .from('procedures')
-    .select('file_urls, file_labels')
-    .eq('id', procedureId)
-    .single();
+const { data: procDataCheck, error: checkError } = await supabase
+  .from('procedures')
+  .select('file_urls')
+  .eq('id', procedureId)
+  .single();
 
   if (checkError) throw checkError;
   if (procDataCheck?.file_urls?.includes(publicUrl)) {
@@ -204,16 +299,13 @@ export async function uploadFileToSupabase({
       throw new Error('Supabase upload failed');
     }
 
-    const { file_urls = [], file_labels = [] } = procDataCheck;
-    const updatedUrls = [...file_urls, publicUrl];
-    const updatedLabels = [...file_labels, label];
+    const updatedUrls = [...fileUrls, publicUrl]; // ✅ correct
 
-    const { error: updateError } = await supabase
-      .from('procedures')
-      .update({
-        file_urls: updatedUrls,
-        file_labels: updatedLabels,
-      })
+const { error: updateError } = await supabase
+  .from('procedures')
+  .update({
+    file_urls: updatedUrls,
+  })
       .eq('id', procedureId);
 
     if (updateError) throw updateError;
@@ -221,136 +313,23 @@ export async function uploadFileToSupabase({
     addInAppLog(`[UPLOAD] File uploaded and database updated: ${publicUrl}`);
 
     // ✅ Memory patch: replace localUri with publicUrl
-if (setFileUrls && Array.isArray(fileUrls)) {
-  let didPatch = false;
-
-  const updatedUrlsInMemory = fileUrls.map(uri => {
-    if (uri === localUri || (uri.startsWith('file://') && uri.includes(fileName))) {
-      didPatch = true;
-      return publicUrl;
-    }
-    return uri;
+if (setFileUrls) {
+  setFileUrls(prev => {
+    const existing = prev?.filter(uri => uri.startsWith('http')) || [];
+    const updated = Array.from(new Set([...existing, publicUrl]));
+    addInAppLog(`[MEMORY PATCH] Final fileUrls (live dedupe): ${JSON.stringify(updated)}`);
+    return updated;
   });
-
-  if (!didPatch && !updatedUrlsInMemory.includes(publicUrl)) {
-    updatedUrlsInMemory.push(publicUrl);
-    addInAppLog(`[FALLBACK] Appending publicUrl manually: ${publicUrl}`);
-  }
-
-  setFileUrls(updatedUrlsInMemory);
-  addInAppLog(`[MEMORY PATCH] Final fileUrls: ${JSON.stringify(updatedUrlsInMemory)}`);
 }
 
-  } catch (error) {
-    addInAppLog(`[QUEUE RETRY] File upload will retry later: ${error.message}`);
-    throw error;
-  }
+// ✅ Mark job complete so saveProcedureDescription waits for this to finish
+notifyJobComplete('uploadProcedureFile', { procedureId, fileUrl: publicUrl });
+
+} catch (error) {
+  addInAppLog(`[QUEUE RETRY] File upload will retry later: ${error.message}`);
+  throw error;
+}
 }
 
 
 
-export function AttachmentGridViewer({
-  imageUrls,
-  fileUrls,
-  fileLabels,
-  captions = { image: {}, file: {} },
-  detailsEditMode,
-  attachmentDeleteMode,
-  onDeleteAttachment,
-  onSelectImage,
-  onEditCaption,
-})
-{
-  const renderStrike = () => (
-    <View style={{
-      position: 'absolute',
-      top: 0, left: 0, right: 0, bottom: 0,
-      justifyContent: 'center',
-      alignItems: 'center',
-      zIndex: 2
-    }}>
-      <View style={{
-        position: 'absolute',
-        width: '140%',
-        height: 4,
-        backgroundColor: '#ff0000',
-        transform: [{ rotate: '-45deg' }]
-      }} />
-    </View>
-  );
-
-const renderImage = (uri, index) => {
-
-  return (
-    <View key={`img-${index}`} style={{ position: 'relative' }}>
-      <View style={{ alignItems: 'center' }}>
-        <TouchableOpacity onPress={() => attachmentDeleteMode ? onDeleteAttachment(uri) : onSelectImage(index)}>
-          <Image source={{ uri }} style={styles.thumbnail} />
-          {attachmentDeleteMode && renderStrike()}
-        </TouchableOpacity>
-
-{captions?.[uri] && (
-  <View style={{
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: 'rgba(32, 32, 32, 0.6)',
-    paddingVertical: 2,
-    paddingHorizontal: 4,
-  }}>
-    <Text style={styles.captionText} numberOfLines={2}>
-      {captions[uri]}
-    </Text>
-  </View>
-)}
-      </View>
-
-{SHOW_HOURGLASS && uri.startsWith('file://') && <PendingHourglass />}
-
-      {detailsEditMode && !attachmentDeleteMode && (
-<TouchableOpacity
-  onPress={() => onEditCaption(uri)}
-  style={{
-    position: 'absolute',
-    top: 4,
-    left: 4,
-    backgroundColor: '#00ff00',
-    padding: 4,
-    zIndex: 3,
-  }}
->
-  <MaterialCommunityIcons name="pencil" color="#000" size={18} />
-</TouchableOpacity>
-      )}
-    </View>
-  );
-};
-
-const renderFile = (uri, index) => (
-  <View key={`file-${index}`} style={{ position: 'relative' }}>
-    <TouchableOpacity
-      onPress={() => attachmentDeleteMode ? onDeleteAttachment(uri) : Linking.openURL(uri)}
-      style={styles.pdfTouchable}
-    >
-      <MaterialCommunityIcons name="file-cog-outline" color="#0f0" size={27} />
-      <Text style={styles.pdfLabelText} numberOfLines={3}>
-        {fileLabels?.[index] || 'Unlabeled'}
-      </Text>
-    </TouchableOpacity>
-    {uri.startsWith('file://') && <PendingHourglass />}
-    {attachmentDeleteMode && (
-      <View style={styles.pdfStrikeWrapper}>
-        <View style={styles.pdfStrikeLine} />
-      </View>
-    )}
-  </View>
-);
-
-  return (
-    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
-      {[...(imageUrls || [])].map(renderImage)}
-      {[...(fileUrls || [])].map(renderFile)}
-    </View>
-  );
-}

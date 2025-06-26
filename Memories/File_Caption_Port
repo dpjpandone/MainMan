@@ -1,0 +1,210 @@
+Audit of File Caption and Label Usage in file_captions Branch
+
+Migration to Unified attachment_captions: Legacy Caption/Label References
+ProcedureCard Component – Captions & File Labels in Procedure Details
+State Management: The ProcedureCard component maintains local state for attachment captions and file labels. It initializes a captions object (with separate sub-objects for images and files) and parallel arrays fileUrls and fileLabels from the procedure item data
+github.com
+github.com
+. On opening the procedure’s details (modal visible), it loads fresh data from Supabase including captions, file_urls, and file_labels. These are then set into state via setCaptions, setFileUrls, and setFileLabels
+github.com
+github.com
+. Notably, the captions state is a structured object { image: {}, file: {} }, whereas file labels are handled as a simple array in fileLabels. Displaying Attachments: The component renders an AttachmentGridViewer with both image and file attachments. It passes down the arrays imageUrls and fileUrls along with the corresponding fileLabels array and the captions object
+github.com
+. This is where the legacy approach surfaces: image captions are provided via the captions object, but file descriptions use the separate fileLabels list. The AttachmentGridViewer uses these props to display each attachment’s label or caption (details below). Adding File Attachments (Label Prompt): In edit mode, a “Files” button triggers the FileLabelPrompt modal for non-image attachments
+github.com
+. When the user enters a label for a new file (e.g. a PDF or DOCX), ProcedureCard handles the submission by closing the prompt and invoking uploadProcedureFile via the sync queue
+github.com
+. The call passes the current fileUrls/fileLabels state and the new label text into uploadProcedureFile
+github.com
+. This is the point where the file’s label is captured in the legacy array system rather than a unified captions store. The label text will be used to name the file and to update the fileLabels array in state and database. Editing Captions (Images Only): For images, an “Edit” (pencil) icon is available on each thumbnail (when detailsEditMode is true). Tapping it calls onEditCaption(uri), which stores the target image URI and opens the CaptionPrompt modal for editing
+github.com
+. The CaptionPrompt is configured with the current captions object and a specific initial caption derived from captions.image[captionTargetUri]
+github.com
+. Upon saving, handleSaveCaption will update the captions state (specifically captions.image) with the new text and trigger a deferred sync job (see below). No equivalent UI exists for editing file attachment labels – the code does not present a pencil icon for files, and onEditCaption is only used for image URIs. This implies that file labels are currently set only at upload time via the FileLabelPrompt and are not editable afterward in the UI. Deleting Attachments: When an attachment is removed via the “Delete” mode, ProcedureCard checks the file type by URI. If the URI ends with “.pdf” (indicating a file attachment), it calls deleteProcedureFile, passing in the relevant fileUrls, fileLabels, and their setters along with the procedure ID
+github.com
+. Otherwise (for images), it calls handleDeleteImage. This logic ensures the appropriate legacy data structures are updated for each type – for files it will remove entries from the file URL and label arrays, whereas for images it will remove from the image URL list and (if implemented) any caption entry. (Notably, there is no direct handling to remove an entry from captions.file on file deletion – since file captions were not individually stored in the captions object under the legacy approach.)
+AttachmentGridViewer – Thumbnail Grid for Images and Files
+Props and Structure: AttachmentGridViewer is a reusable component that renders thumbnails for both images and files. It accepts imageUrls, fileUrls, and fileLabels props, plus a combined captions object (with default { image: {}, file: {} }) and flags for edit modes
+github.com
+. Under the legacy implementation, this component treats image and file attachments differently:
+Image Thumbnails: Each image URI is rendered with an <Image> element. If a caption exists for that image URI (captions?.image?.[uri]), a translucent overlay with the caption text is displayed on the image
+github.com
+. This uses the captions.image map to fetch the caption by image URL. In edit mode, a green pencil icon is shown on the image, and tapping it calls onEditCaption(uri) to let the user modify the caption
+github.com
+github.com
+.
+File Thumbnails: Each file (e.g. PDF) is shown as an icon with a text label underneath. The label is taken from the fileLabels array by index, corresponding to the file’s index in fileUrls
+github.com
+. If no label is present for that index, it falls back to a default like “Unlabeled”. There is no use of captions.file in this rendering – the file’s descriptive text is solely derived from the fileLabels list. Additionally, no edit pencil is provided for file items (since captions.file entries aren’t being actively used to store editable captions in the UI). The file thumbnail’s onPress opens the file (via Linking.openURL) or triggers deletion if in delete mode
+github.com
+.
+Summary: In AttachmentGridViewer, images leverage the captions.image object for overlay text and editing, whereas files rely on parallel arrays (fileUrls/fileLabels) to display a label. This divergence is exactly what the unified attachment_captions migration aims to resolve by having a single source for attachment captions/labels.
+FileLabelPrompt – Modal to Input File Labels
+The FileLabelPrompt component is a simple modal dialog for naming file attachments (used when adding a new PDF/Doc, etc.). It contains a text input and OK/Cancel buttons
+github.com
+github.com
+. When the user submits a label, it trims the text and invokes the provided onSubmit callback with the label (or a default like "Untitled PDF" if empty)
+github.com
+. In the ProcedureCard context, this onSubmit handler is set to queue the file upload process and update state. In ProcedureCard, upon pressing the “Files” button, setLabelPromptVisible(true) opens this prompt
+github.com
+. The submitted label is then handled as follows: the prompt is closed and uploadProcedureFile is called (via wrapWithSync for offline queueing) with the given label and current attachment state
+github.com
+. This mechanism allows the user to assign a human-friendly name to the file at upload time. That name is immediately used in the UI (added to fileLabels state) and will also be saved to the database’s file_labels field by the upload logic. Key point: FileLabelPrompt is the UI entry-point for file captions in the legacy system. It ensures that non-image attachments get a label (since by default file URIs are just local paths or URLs). However, the label collected here is not stored in the captions object, but instead in the separate fileLabels state/field. Migrating to attachment_captions will likely involve capturing this input and storing it in the new unified table rather than in an array on the procedure.
+File Upload & Deletion Logic (fileUtils.js)
+The file-related utility functions handle persisting these attachments and their labels using the legacy arrays:
+Uploading Files (uploadProcedureFile): This function is invoked when adding a file attachment (as seen above). It picks a document (PDF) and prepares it for upload
+github.com
+. A sanitized version of the provided label is used to construct the storage filename (embedded in the file name)
+github.com
+. Then it performs an optimistic UI update: the new file’s local URI is appended to the fileUrls array, and the sanitizedLabel is appended to fileLabels
+github.com
+. The state is updated via setFileUrls and setFileLabels immediately, so the UI reflects the new file and its label. Next, uploadProcedureFile enqueues a background job to actually upload the file to Supabase storage and update the DB
+github.com
+.
+File Upload Sync Job (uploadFileToSupabase): The queued job (defined in fileUtils or job executor) runs asynchronously. It checks if the file is already in the DB to avoid duplicates
+github.com
+. Then it uploads the file binary to storage. After a successful upload, it retrieves the procedure’s current file_urls and file_labels from Supabase and appends the new file’s public URL and label to those arrays
+github.com
+. It updates the procedure record in the database with the new file_urls and file_labels arrays
+github.com
+. This is the legacy persistence: captions for files are effectively stored as a list of labels parallel to the URL list. The job then “patches” the in-memory state: it replaces the local file URI with the final public URL in the fileUrls array (if it wasn’t already replaced)
+github.com
+. Notably, it does not update a captions.file object – any label is already present in the fileLabels state/DB array, so no further caption object patch is needed under the old system.
+Deleting Files (deleteProcedureFile): This utility is called when a file attachment is removed
+github.com
+. It locates the file’s index in the fileUrls array, then removes that entry from both fileUrls and fileLabels (keeping the arrays aligned)
+github.com
+. The state is updated via setFileUrls/setFileLabels to reflect the removal
+github.com
+. It also updates the procedure row in Supabase: the file_urls and file_labels fields are overwritten with the updated arrays (with the file removed)
+github.com
+. This ensures the legacy data store no longer references the deleted file or its label. There is no direct handling of the captions JSON field here – since previously no caption text for files was stored there, this omission makes sense in the legacy context. After deletion, the UI and DB remain consistent with one fewer entry in both file URL and label lists.
+Where Legacy Handling Appears: Throughout these functions we see references to the legacy structures:
+Use of fileUrls/fileLabels state and their setters (setFileUrls, setFileLabels)
+github.com
+github.com
+.
+Appending or filtering these arrays to add/remove attachments
+github.com
+github.com
+.
+Writing to Supabase procedures.file_urls and file_labels fields
+github.com
+github.com
+.
+The lack of any captions.file[...] usage in these flows (no mapping of file URLs to captions in an object) – file label text is handled entirely via the fileLabels list.
+These are precisely the points that would change when moving to a unified attachment_captions table: instead of updating arrays on the procedure record, the code would create, update, or delete entries in the attachment_captions table (likely keyed by an attachment ID or URL). The state management in the front-end would also shift to use a unified captions source for both images and files, rather than maintaining parallel arrays for files.
+CaptionPrompt – Image Caption Editing Modal
+The CaptionPrompt (from utils/captionUtils.js) is the modal used for editing image captions. It is provided here for completeness, as it represents how caption text is handled for images in the UI:
+The prompt shows a multiline text input for the caption and has Save/Cancel buttons
+github.com
+github.com
+. When opened, it initializes with any existing caption text (passed in as initialCaption prop).
+In ProcedureCard, this is rendered as the CaptionPrompt component with captions and setCaptions passed down, and importantly an initialCaption={captions?.image?.[captionTargetUri] || ''} for the selected image
+github.com
+. This means it pre-fills the current caption for that image (looked up by the image’s URI key in the captions.image object).
+On Save, the prompt’s onSubmit calls handleSaveCaption(captionText). That handler in ProcedureCard performs an optimistic update to the captions state: it writes the new text into captions.image under the appropriate URI key
+github.com
+. If the image was still a local file (not yet uploaded), it uses a matching logic to eventually map the caption to the final URL once available
+github.com
+. After updating state, it closes the modal and then triggers a background job (setImageCaptionDeferred) if the image was not yet synced (i.e., if the URI is still a local file path)
+github.com
+.
+This component and flow highlight how image captions have been handled via the captions object (with keys for each image URL). There is no analogous prompt for file attachments in the current UI – files get their label from the FileLabelPrompt at upload time and cannot be edited thereafter. If in the future file labels are to be editable, one could imagine reusing a similar prompt (perhaps generalized) and using captions.file[fileUri] or an attachment ID to track changes – but at present, that’s not implemented.
+Background Sync Jobs – Caption Persistence in Supabase
+In the legacy design, image captions and file labels are ultimately stored differently in the database (JSON vs arrays), and the sync layer reflects that:
+Image Caption Deferred Sync (setImageCaptionDeferred): This job runs after an image upload, to save a caption that was entered while the image was offline. It fetches the procedure’s current image_urls and captions from Supabase
+github.com
+. Then it finds which uploaded URL corresponds to the local image (matching on the filename)
+github.com
+. It then updates the captions JSON: adding the caption text under captions.image[matchedUrl] while preserving the rest (including leaving captions.file unchanged)
+github.com
+. This updated captions object is written back to the procedures table
+github.com
+. After this, the image’s caption is permanently stored in the procedure’s JSON data on Supabase. (The code explicitly carries along captions.file in this update, but since it’s not used for any new data here, it’s just persisted as-is
+github.com
+.)
+UploadProcedureImage Executor: When an image is uploaded, the job uses the provided captions state to perform a memory patch similar to files. If a caption existed for the local image URI, it transfers that caption to the new public URL key in the captions.image map in state
+github.com
+. (There’s no DB write here for captions – the actual DB update for captions is handled by the deferred job above once the URL is known. The immediate DB update is only for the image_urls list.)
+No Equivalent for File Captions: For file attachments, there is no “setFileCaptionDeferred” job or similar. The label given to a file is saved directly as part of the file_labels array in the procedure record when the file is uploaded
+github.com
+. There is no separate JSON map for file captions to update, so the sync system does not need a second step for files. This asymmetry is exactly what the migration to attachment_captions aims to eliminate. With a unified table, adding or editing a caption/label for a file would likely mirror the image caption flow: each attachment (image or file) could have an entry in the attachment_captions table that can be updated independently of the procedure record. The new system would remove the need for the file_labels array and possibly the captions JSON on the procedure altogether, centralizing caption text in one relational table.
+Summary of Affected Files and Code Locations
+The following table summarizes all the project files and code sections that involve the legacy caption/label handling for attachments:
+File (Path)	Legacy Caption/Label Handling References (Line Nos.)
+components/ProcedureCard.js	Maintains state for captions (with .file and .image keys) and for fileLabels (array)
+github.com
+github.com
+. On load, fetches captions, file_urls, and file_labels from DB and updates state via setCaptions, setFileUrls, setFileLabels
+github.com
+github.com
+. Uses these to render attachments: passes captions, fileLabels to <AttachmentGridViewer>
+github.com
+. Triggers FileLabelPrompt for new files
+github.com
+ and calls uploadProcedureFile with label, updating fileLabels
+github.com
+. Triggers CaptionPrompt for images, using captions.image[uri] as initial text
+github.com
+. Deletes attachments by updating fileUrls/fileLabels or captions accordingly
+github.com
+.
+utils/fileUtils.js (File upload/delete utils)	FileLabelPrompt component provides UI to input a file’s label
+github.com
+github.com
+. uploadProcedureFile uses the label to name the file and optimistically appends to fileUrls & fileLabels state
+github.com
+github.com
+, then queues the background upload
+github.com
+. deleteProcedureFile removes entries from fileUrls/fileLabels and updates the procedure’s file_urls and file_labels in DB
+github.com
+github.com
+. uploadFileToSupabase (background job) updates Supabase procedures.file_urls and file_labels by appending new values
+github.com
+, and patches in-memory fileUrls (replacing local URI with public URL)
+github.com
+. (No direct handling of a captions.file map in these functions – file labels are kept in the array.)
+utils/imageUtils.js (Image upload utils)	Handles image attachments with a captions object. handleImageSelection appends local image to imageUrls and can take a captions, setCaptions in the payload
+github.com
+github.com
+. Queues uploadProcedureImage with these. uploadImageToSupabase updates procedures.image_urls in DB and then patches imageUrls in state
+github.com
+github.com
+. It also patches the in-memory caption: if a caption existed for the local URI, it moves it to the new URL key in captions.image
+github.com
+. There is no fileLabels equivalent here since image captions use the captions object.
+utils/jobExecutors.js	Implements background jobs. uploadProcedureFile job calls uploadFileToSupabase (see above)
+github.com
+. uploadProcedureImage job calls uploadImageToSupabase and, on completion, triggers notifyJobComplete (no direct caption handling aside from what imageUtils does)
+github.com
+github.com
+. setImageCaptionDeferred job handles syncing an image caption: it fetches captions from DB, inserts the new caption into captions.image[uploadedUrl] (keeping captions.file intact)
+github.com
+, and updates the DB record’s captions field
+github.com
+. (There is no corresponding job for file captions since file labels were saved immediately with the file record.)
+utils/captionUtils.js (CaptionPrompt)	Defines the CaptionPrompt modal used for editing image captions. It’s invoked with an initial text from captions.image[...]
+github.com
+ and on submit calls back to save the caption
+github.com
+. The logic to actually set captions and queue sync is in ProcedureCard (handleSaveCaption)
+github.com
+github.com
+. This component currently assumes an image context (placeholder text “Enter image caption…”
+github.com
+) – it is not used for files under the legacy system.
+utils/fileUtils.js (AttachmentGridViewer)	(Note: AttachmentGridViewer is defined in this file.) It renders attachments using the provided captions/labels. For images: displays caption overlay if captions.image[uri] exists
+github.com
+ and shows an edit icon to invoke caption editing
+github.com
+. For files: displays the label from fileLabels[index] or “Unlabeled” if not set
+github.com
+, and opens the file on tap (or deletes if in delete mode)
+github.com
+. It expects fileLabels array and does not utilize captions.file for display. The captions prop is accepted (with a default including file: {}) but in practice only captions.image is used in the UI
+github.com
+.
+
+Each of the above locations will need to be addressed to migrate away from the legacy system. In summary, anywhere the code reads or writes captions.file[...] (currently minimal usage in UI), accesses or mutates the fileLabels array, or uses the paired fileUrls/fileLabels logic, should be refactored to use the new attachment_captions data source. This includes transitioning the UI components (like AttachmentGridViewer and prompts) to fetch and display captions for files from the unified table, and updating the add/delete flows to create or remove entries in attachment_captions rather than in the procedure’s JSON/array fields. By enumerating the above references, we have a roadmap of all the spots in the codebase tied to the old caption/label handling that require changes for the new unified attachment captions implementation.

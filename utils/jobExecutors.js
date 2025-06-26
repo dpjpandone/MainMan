@@ -52,27 +52,27 @@ updateMachineShop: async ({ machineId, shop }) => {
 
 uploadProcedureFile: async ({
   localUri,
-  label,
+  caption,
   procedureId,
   fileName,
   setFileUrls,
   fileUrls,
-  setFileLabels,
-  fileLabels,
 }) => {
   addInAppLog(`[EXECUTOR] Starting file upload: ${localUri}`);
   try {
-    await uploadFileToSupabase({
-      localUri,
-      label,
-      procedureId,
-      fileName,
-      setFileUrls,
-      fileUrls,
-      setFileLabels,
-      fileLabels,
-    });
-    addInAppLog(`[EXECUTOR] File uploaded successfully: ${localUri}`);
+await uploadFileToSupabase({
+  localUri,
+  caption,
+  procedureId,
+  fileName,
+  setFileUrls,
+  fileUrls,
+});
+addInAppLog(`[EXECUTOR] File uploaded successfully: ${localUri}`);
+
+// ✅ NEW — notify the queue that this job is complete
+addInAppLog(`[DEBUG] Executor finished — triggering notifyJobComplete`);
+notifyJobComplete('uploadProcedureFile', { procedureId });
   } catch (err) {
     addInAppLog(`[EXECUTOR] File upload failed: ${err.message}`);
     throw err;
@@ -132,15 +132,13 @@ saveProcedureDescription: async ({
   description,
   imageUrls = [],
   fileUrls = [],
-  fileLabels = [],
-  captions = { image: {}, file: {} },
 }) => {
   addInAppLog(`[EXECUTOR] Saving procedure metadata for: ${procedureId}`);
 
-  // Re-fetch synced URLs to avoid overwriting remote files/images
+  // Re-fetch synced URLs to avoid overwriting confirmed uploads
   const { data: fresh, error: fetchError } = await supabase
     .from('procedures')
-    .select('image_urls, file_urls, captions')
+    .select('image_urls, file_urls')
     .eq('id', procedureId)
     .single();
 
@@ -157,26 +155,12 @@ saveProcedureDescription: async ({
   const localFileUrls = (fileUrls || []).filter(uri => uri.startsWith('http'));
   const mergedFileUrls = Array.from(new Set([...existingFileUrls, ...localFileUrls]));
 
-  const existingCaptions = fresh?.captions || { image: {}, file: {} };
-  const mergedCaptions = {
-    image: {
-      ...existingCaptions.image,
-      ...captions.image,
-    },
-    file: {
-      ...existingCaptions.file,
-      ...captions.file,
-    },
-  };
-
   const { error: updateError } = await supabase
     .from('procedures')
     .update({
       description,
       image_urls: mergedImageUrls,
       file_urls: mergedFileUrls,
-      file_labels: fileLabels,
-      captions: mergedCaptions,
     })
     .eq('id', procedureId);
 
@@ -272,7 +256,53 @@ setImageCaptionDeferred: async ({ procedureId, localUri, caption, fileName }) =>
 
   addInAppLog(`[DEFERRED] ✅ Caption synced for: ${matchedUrl}`);
   notifyJobComplete('setImageCaptionDeferred', { procedureId });
-}
+},
 
+setFileCaptionDeferred: async ({ procedureId, localUri, caption, fileName }) => {
+  addInAppLog(`[EXECUTOR] Attempting deferred FILE caption sync for: ${localUri}`);
+
+  const { data, error } = await supabase
+    .from('procedures')
+    .select('file_urls')
+    .eq('id', procedureId)
+    .single();
+
+  if (error) {
+    addInAppLog(`[DEFERRED] ❌ Failed to fetch procedure: ${error.message}`);
+    throw new Error(`[DEFERRED] Failed to fetch procedure: ${error.message}`);
+  }
+
+  const file_urls = data?.file_urls || [];
+  const fallbackName = localUri.split('/').pop();
+  const nameToUse = fileName || fallbackName;
+
+  addInAppLog(`[DEFERRED] fileName parsed: ${nameToUse}`);
+  addInAppLog(`[DEFERRED] Searching file_urls: ${JSON.stringify(file_urls)}`);
+
+const matchedUrl = file_urls.find((url) => {
+  const urlFileName = url.split('/').pop(); // e.g., "Manual-abc-123.pdf"
+  const suffix = urlFileName?.split('-').slice(-2).join('-'); // keep last 2 segments
+  return nameToUse.endsWith(suffix);
+});
+
+  if (!matchedUrl) {
+    addInAppLog(`[DEFERRED] ❌ No Supabase URL found for fileName: ${nameToUse}`);
+    throw new Error('[DEFERRED] Supabase URL not available yet');
+  }
+
+  const { error: updateError } = await supabase
+    .from('attachment_captions')
+    .upsert({ file_url: matchedUrl, caption }, { onConflict: 'file_url' });
+
+  if (updateError) {
+    addInAppLog(`[DEFERRED] ❌ Failed to update caption: ${updateError.message}`);
+    throw new Error(`[DEFERRED] Failed to update caption: ${updateError.message}`);
+  }
+
+  addInAppLog(`[DEBUG] Upserting FILE caption to attachment_captions: ${matchedUrl} = "${caption}"`);
+  addInAppLog(`[DEFERRED] ✅ Caption synced for FILE: ${matchedUrl}`);
+
+  notifyJobComplete('setFileCaptionDeferred', { procedureId });
+}
 
 };
