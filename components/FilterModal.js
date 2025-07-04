@@ -72,19 +72,22 @@ const handleSelect = (shop) => {
     );
   };
 
-  const deleteShop = async (shop) => {
-    const { error } = await supabase
-      .from('shops')
-      .delete()
-      .eq('company_id', companyId)
-      .eq('name', shop);
+const deleteShop = async (shop) => {
+  const { error } = await supabase
+    .from('shops')
+    .delete()
+    .eq('company_id', companyId)
+    .eq('name', shop);
 
-    if (error) {
-      console.warn('❌ Failed to delete shop:', error);
-    } else {
-      await fetchShopList();
-    }
-  };
+  if (error) {
+    console.warn('❌ Failed to delete shop:', error);
+  } else {
+    // 🗝️  Force local clear so stale shop doesn't stick
+    setShopList((prev) => prev.filter((s) => s !== shop));
+    // ✅ Then refetch fresh from Supabase
+    fetchShopList(companyId);
+  }
+};
 
   const handleSubmitNew = async () => {
     const trimmed = customShop.trim();
