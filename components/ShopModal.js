@@ -20,6 +20,8 @@ export default function ShopModal({ visible, onClose, onShopSelected, companyId,
   const [mode, setMode] = useState('select'); // 'select' or 'custom'
   const [customShop, setCustomShop] = useState('');
 
+console.log('[ShopModal]', { visible, companyId });
+
 const fetchShopList = async () => {
   setLoading(true);
   try {

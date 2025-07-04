@@ -26,12 +26,14 @@ const [shopModalVisible, setShopModalVisible] = useState(false);
   
   const loadMachineAndProcedures = useCallback(async () => {
     await wrapWithSync('loadMachineAndProcedures', async () => {
-      const { data: machineData } = await supabase
-        .from('machines')
-.select('id, machine_id, procedure_name, description, due_date, interval_days, last_completed, completed_by, image_urls, file_urls')
-        .eq('id', machineId)
-        .single();
+const { data: machineData } = await supabase
+  .from('machines')
+  .select('id, machine_id, company_id, procedure_name, description, due_date, interval_days, last_completed, completed_by, image_urls, file_urls')
+  .eq('id', machineId)
+  .single();
   
+    console.log('[MachineScreen] machineData:', machineData); 
+
       const { data: proceduresData } = await supabase
         .from('procedures')
         .select('*')
@@ -43,7 +45,24 @@ const [shopModalVisible, setShopModalVisible] = useState(false);
     });
   }, [machineId]);
     
+useEffect(() => {
+  const getCompanyId = async () => {
+    const session = await AsyncStorage.getItem('loginData');
+    const parsedSession = JSON.parse(session);
+    const id = parsedSession?.companyId;
 
+    if (!id) {
+      console.warn('❌ Missing companyId in MachineScreen!');
+      return;
+    }
+
+    console.log('[MachineScreen] Loaded companyId:', id);
+    setCompanyId(id);
+  };
+
+  getCompanyId();
+}, []);
+  
   useEffect(() => {
     const unsubscribe = subscribeToJobComplete((label, payload) => {
       addInAppLog(`[CALLBACK] Job complete received in MachineScreen: ${label}`);
@@ -71,6 +90,8 @@ const [shopModalVisible, setShopModalVisible] = useState(false);
 
   const [machine, setMachine] = useState(null);
   const [procedures, setProcedures] = useState([]);
+  const [companyId, setCompanyId] = useState(null); 
+
   const [modalVisible, setModalVisible] = useState(false);
   const [name, setName] = useState('');
   const [interval, setInterval] = useState('');
@@ -300,7 +321,7 @@ onShopSelected={async (shopName) => {
   await tryNowOrQueue('updateMachineShop', { machineId, shop: shopName });
   loadMachineAndProcedures(); // <- Refresh machine.shop display
 }}
-        companyId={machine?.company_id}
+  companyId={companyId}   // ✅ Uses your new state instead!
         currentShop={machine?.shop}
       />
     </View>
